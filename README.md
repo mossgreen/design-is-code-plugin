@@ -42,15 +42,26 @@ Each arrow in your UML becomes a `verify()` call using London-style mockist test
 
 ## Quick Start
 
-1. Install the plugin in Claude Code:
+1. Install the plugin in Claude Code ([plugin docs](https://code.claude.com/docs/en/plugins)):
    ```
    /plugin marketplace add mossgreen/design-is-code-plugin
-   /plugin install design-is-code@mossgreen-design-is-code-plugin
+   /plugin install design-is-code@mossgreen-design-is-code
    ```
 2. Put your UML sequence diagram in your project's `design/` folder
 3. Run `/design-is-code:disc <filename>` in Claude Code
 4. Check TODOs in the generated code (decision table skeletons for pure functions need human-designed test cases)
 5. Run `./gradlew test`
+
+## Uninstall
+
+```
+/plugin uninstall design-is-code@mossgreen-design-is-code
+/plugin marketplace remove mossgreen-design-is-code
+```
+
+Verify with `/plugin` — check the Installed tab.
+
+See [Claude Code plugin docs](https://code.claude.com/docs/en/plugins-reference.md) for full CLI reference.
 
 ## Example
 
