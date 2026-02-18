@@ -1,8 +1,11 @@
 {
-"name": "design-is-code",
-"description": "Transform UML sequence diagrams into working Java code using the DisC (Design is Code) methodology: first generate tests from UML, then derive implementation from the tests.",
-"version": "0.0.1",
-"author": {
-"name": "Moss Gu"
-}
+  "name": "design-is-code",
+  "description": "Transform UML sequence diagrams into working Java code using the DisC (Design is Code) methodology: first generate tests from UML, then derive implementation from the tests.",
+  "version": "0.0.1",
+  "author": {
+    "name": "Moss Gu"
+  },
+  "repository": "https://github.com/mossgreen/design-is-code-plugin",
+  "license": "MIT",
+  "keywords": ["uml", "code-generation", "tdd", "java", "disc"]
 }

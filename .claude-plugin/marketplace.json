@@ -1,0 +1,16 @@
+{
+  "name": "mossgreen-design-is-code",
+  "owner": {
+    "name": "Moss Gu",
+    "email": "mossgu@outlook.com"
+  },
+  "metadata": {
+    "description": "UML-to-code plugin using the DisC (Design is Code) methodology"
+  },
+  "plugins": [
+    {
+      "name": "design-is-code",
+      "source": "./"
+    }
+  ]
+}
