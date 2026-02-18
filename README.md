@@ -36,15 +36,19 @@ UML Sequence Diagram
   Working Code
 ```
 
-The `/disc` command runs both phases **in sequence within a single invocation** — Phase 1 generates tests from the UML, then Phase 2 reads only the tests to derive the implementation. Phase 2 never sees the UML. This wall ensures the code matches exactly what the tests demand.
+The `/design-is-code:disc` command runs both phases **in sequence within a single invocation** — Phase 1 generates tests from the UML, then Phase 2 reads only the tests to derive the implementation. Phase 2 never sees the UML. This wall ensures the code matches exactly what the tests demand.
 
 Each arrow in your UML becomes a `verify()` call using London-style mockist tests — tests that verify **call structure** (which collaborators are called, in what order, with what arguments), not internal state. `verify(repository).save(product)` only passes if the implementation actually calls `repository.save(product)`. The AI can't skip it, reorder it, or change the arguments. You review the design, not the code.
 
 ## Quick Start
 
-1. Clone the repo
-2. Put your UML sequence diagram in the `design/` folder
-3. Run `/disc <filename>` in Claude Code
+1. Install the plugin in Claude Code:
+   ```
+   /plugin marketplace add mossgreen/design-is-code-plugin
+   /plugin install design-is-code@mossgreen-design-is-code-plugin
+   ```
+2. Put your UML sequence diagram in your project's `design/` folder
+3. Run `/design-is-code:disc <filename>` in Claude Code
 4. Check TODOs in the generated code (decision table skeletons for pure functions need human-designed test cases)
 5. Run `./gradlew test`
 
@@ -87,8 +91,3 @@ AI should not invent both the test cases and the implementation for pure functio
 | Component interactions (UML arrows) | Developers | Architecture decisions require engineering judgment |
 | Pure function test cases (decision tables) | Product / QA team | Business rules and edge cases require domain knowledge |
 | Implementation | AI | Mechanical — forced by the tests |
-
-
-## Roadmap
-
-DisC currently runs as a Claude Code skill (`/disc`). A standalone plugin release is planned.
