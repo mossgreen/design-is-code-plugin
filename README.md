@@ -76,7 +76,7 @@ Currently supports **Java** with **UML sequence diagrams** (PlantUML format). Su
 
 1. Clone this repo: https://github.com/mossgreen/design-is-code-demo, it's a Java Spring Boot project with simple UML sequence diagram examples.
 2. Run `/disc 01_hello-world.puml` in Claude Code session
-3. it requires java 17.
+3. it requires Java 17.
 
 ## Install Design-Is-Code plugin for Claude Code
 
