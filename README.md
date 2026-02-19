@@ -1,20 +1,33 @@
 # Design is Code (DisC)
 
 A methodology where design generates tests, and tests constrain AI-generated code.
-DisC builds on the London school of TDD (Freeman & Pryce, Growing Object-Oriented Software, Guided by Tests, 2009) and applies it to AI-assisted code generation.
+
+In software, the real work is design. Code is the consequence.
+
+DisC applies London-school TDD (Freeman & Pryce, 2009) to AI code generation. Mockist tests specify exact call structure, order, and arguments — leaving no room for AI interpretation. There is only one implementation that passes. 
+
+What you design is what you get.
 
 ## The Problem
 
 AI code generation has two root causes of failure:
 
-1. **Natural language is ambiguous.** The same prompt produces different code every time. There's no contract — just interpretation.
-2. **Cost is asymmetric.** AI has no cost to be wrong. You have high cost to miss errors. AI generates in seconds; you review for hours.
+1. **Natural language is ambiguous.** Natural language is built for human communication, where ambiguity is tolerable. As a code specification, it's a liability. The AI interprets rather than executes — same prompt, different code, every time. There's no contract. There's no determinism.
+2. **Cost is asymmetric.** AI has no cost to generate, and no cost to be wrong. You have high cost to review, and high cost if you miss an error. That's not collaboration — that's **exploitation**.
 
-## Why Precise Design?
+## Design is the Contract
 
-Every generation of software engineering raised the abstraction level while preserving formal notation — machine code → assembly → structured programming → OOP. Natural language breaks that contract. It's expressive, but not formal. The same prompt means different things every time.
+Every generation of software engineering raised the abstraction level while preserving formal notation — machine code → assembly → structured programming → OOP. Each step made intent more expressible without sacrificing precision. Natural language breaks that contract. It's expressive, but not formal.
 
-Precise design representations restore the contract. UML sequence diagrams are unambiguous: boxes are components, arrows are calls, labels are method signatures. No interpretation needed. DisC works with any design representation that meets this precision bar. UML is the current supported format.
+This is not a tooling problem. It's a specification problem.
+
+If the specification is ambiguous, everything downstream inherits that ambiguity — the tests, the implementation, the architecture. You can't review your way out of a bad contract. You can only fix it at the source.
+
+Design is the source.
+
+A precise design artifact eliminates interpretation before code is written. This changes where human effort belongs. Peer collaboration, architectural debate, edge case reasoning — all of it should happen at design time, not in code review. Reviewing code that AI generated from an agreed design is spot-checking. Reviewing code that AI generated from a natural language prompt is archaeology.
+
+DisC works with any design representation that meets this precision bar. UML sequence diagrams are the current supported format.
 
 ## How It Works
 
@@ -36,12 +49,6 @@ The key mechanism:
   Working Code (Reviewed designs don't need code review)
 ```
 
-This wall between phases is what makes DisC work. The implementation can only produce what the tests demand — no more, no less.
-
-Each arrow in a UML sequence diagram becomes a verify() call using London-style mockist tests — verifying which collaborators are called, in what order, with what arguments. verify(repository).save(product) only passes if the implementation actually calls repository.save(product). The AI can't skip it, reorder it, or change the arguments.
-
-**Review shifts to design time**. One hour of peer design review replaces many hours of code review. The remaining review is sampling — verifying the transformation was correct, not reading the full codebase.
-
 ## Scope and Limitations
 
 DisC constrains interaction structure — how components collaborate. It does not constrain non-functional properties: performance, readability, or error handling style.
@@ -51,21 +58,25 @@ Two kinds of components behave differently:
 - Collaborative components have dependencies that can be verified with mocks. AI generation risk is low — the tests fully constrain the structure.
 - Pure functions (Mappers, Factories, algorithms) have no dependencies and can't be verified by interaction tests. For these, humans must design the test cases: input values, expected outputs, and edge cases. AI should not invent both the test cases and the implementation — that creates false positives where tests pass but logic is wrong.
 
-- Algorithmic code — ML pipelines, trading algorithms, game engines — falls outside the methodology entirely.
+Algorithmic code — ML pipelines, trading algorithms, game engines — falls outside the methodology entirely.
 
 ## Who Does the Design?
 
-| What | Who | Why |
-|---|---|---|
-| Component interactions (UML arrows) | Developers | Architecture decisions require engineering judgment |
-| Pure function test cases (decision tables) | Product / QA team | Business rules and edge cases require domain knowledge |
-| Implementation | AI | Mechanical — forced by the tests |
+| What | Who          | Why |
+|---|--------------|---|
+| Component interactions (UML arrows) | Developers   | Architecture decisions require engineering judgment |
+| Pure function test cases (decision tables) | Product team | Business rules require domain knowledge |
+| Implementation | AI           | Mechanical — forced by the tests |
+
+## Supported Languages
+
+Currently supports **Java** with **UML sequence diagrams** (PlantUML format). Support for additional languages and design formats is planned.
 
 ## Quick Start
 
-1. Clone this repo
-2. Run `claude --plugin-dir .` from the repo root. It loads the plugin for the current session only. No cleanup needed afterward.
-3. Run `/disc 01_hello-world.puml` in Claude Code
+1. Clone this repo: https://github.com/mossgreen/design-is-code-demo, it's a Java Spring Boot project with simple UML sequence diagram examples.
+2. Run `/disc 01_hello-world.puml` in Claude Code session
+3. it requires java 17.
 
 ## Install Design-Is-Code plugin for Claude Code
 

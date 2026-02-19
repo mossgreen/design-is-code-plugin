@@ -1,4 +1,0 @@
-@startuml
-GreetingService -> GreetingFactory: create(userName)
-GreetingService <-- GreetingFactory: greeting: Greeting
-@enduml
