@@ -1,0 +1,12 @@
+@startuml
+InvoiceService -> OrderRepository: findAllByCustomerId(customerId)
+InvoiceService <-- OrderRepository: orders: List<Order>
+InvoiceService -> InvoiceBuilderFactory: create()
+InvoiceBuilderFactory --> InvoiceBuilder: <<create>>
+InvoiceService <-- InvoiceBuilderFactory: invoiceBuilder: InvoiceBuilder
+loop for each order in orders
+    InvoiceService -> InvoiceBuilder: addLine(order)
+end
+InvoiceService -> InvoiceBuilder: build()
+InvoiceService <-- InvoiceBuilder: invoice: Invoice
+@enduml

@@ -1,0 +1,9 @@
+@startuml
+OrderService -> OrderRepository: findByOrderId(orderId)
+OrderRepository --> OrderService: result: Optional<Order>
+alt [result.isEmpty()]
+    OrderService -> OrderService: <<throws>> OrderNotFoundException
+else [else]
+    OrderService --> : result.get()
+end
+@enduml
