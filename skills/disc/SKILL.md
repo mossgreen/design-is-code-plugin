@@ -478,6 +478,17 @@ Swap this section to change the target language/framework. All language-specific
 
 **Target: Java / Spring Boot**
 
+### Base Package Detection
+
+`{basePackage}` and `{basePackagePath}` appear throughout this profile. Resolve them BEFORE generating any code:
+
+1. Search for the class annotated with `@SpringBootApplication` — its package IS the base package
+2. If not found, glob for `src/main/java/**/*.java`, read package statements, and use the common prefix
+3. If no Java files exist, check `build.gradle` for `group` or `pom.xml` for `<groupId>`
+4. If still unresolvable, ask the user
+
+`{basePackagePath}` is `{basePackage}` with `.` replaced by `/` (e.g., `com.acme.orders` → `com/acme/orders`).
+
 ### Naming Conventions
 
 | Element | Convention | Example |
@@ -516,28 +527,28 @@ on details.
 
 | Suffix | Package | Example |
 |---|---|---|
-| `*Service` | `com.disc.demo.service` | `OrderService.java` |
-| `*Repository` | `com.disc.demo.repository` | `OrderRepository.java` |
-| `*Mapper` | `com.disc.demo.mapper` | `OrderMapper.java` |
-| `*Factory` | `com.disc.demo.factory` | `OrderFactory.java` |
-| `*Builder` | `com.disc.demo.builder` | `SaleBuilder.java` |
-| `*Controller` | `com.disc.demo.controller` | `OrderController.java` |
-| Entity/model types | `com.disc.demo.entity` or `com.disc.demo.model` | `Order.java` |
-| `*Request`, `*Response`, `*DTO` | `com.disc.demo.model` | `CreateOrderRequest.java` |
+| `*Service` | `{basePackage}.service` | `OrderService.java` |
+| `*Repository` | `{basePackage}.repository` | `OrderRepository.java` |
+| `*Mapper` | `{basePackage}.mapper` | `OrderMapper.java` |
+| `*Factory` | `{basePackage}.factory` | `OrderFactory.java` |
+| `*Builder` | `{basePackage}.builder` | `SaleBuilder.java` |
+| `*Controller` | `{basePackage}.controller` | `OrderController.java` |
+| Entity/model types | `{basePackage}.entity` or `{basePackage}.model` | `Order.java` |
+| `*Request`, `*Response`, `*DTO` | `{basePackage}.model` | `CreateOrderRequest.java` |
 | Test classes | Same package as implementation, under `src/test/java` | `DefaultOrderServiceTest.java` |
 
-If a suffix doesn't match any rule, use `com.disc.demo.service` as the default.
+If a suffix doesn't match any rule, use `{basePackage}.service` as the default.
 
 ### File Paths
 
-- Interface: `src/main/java/com/disc/demo/[package]/[ServiceName].java`
-- Test: `src/test/java/com/disc/demo/[package]/Default[ServiceName]Test.java`
-- Implementation: `src/main/java/com/disc/demo/[package]/Default[ServiceName].java`
+- Interface: `src/main/java/{basePackagePath}/[package]/[ServiceName].java`
+- Test: `src/test/java/{basePackagePath}/[package]/Default[ServiceName]Test.java`
+- Implementation: `src/main/java/{basePackagePath}/[package]/Default[ServiceName].java`
 
 ### Test Class Template
 
 ```java
-package com.disc.demo.service;
+package {basePackage}.service;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
@@ -583,7 +594,7 @@ class Default[ServiceName]Test {
 ### Implementation Template
 
 ```java
-package com.disc.demo.service;
+package {basePackage}.service;
 
 import org.springframework.stereotype.Service;
 
@@ -635,7 +646,7 @@ Before generating anything, check if target files already exist.
 - **Participant names** — using the language_profile file paths rules (as before)
 - **Domain types from return labels** — any type extracted from dashed return arrows
   that is a domain type (per the Domain Type Rule in language_profile) also gets a
-  file path derived and checked. Use `com.disc.demo.entity` as the package.
+  file path derived and checked. Use `{basePackage}.entity` as the package.
 
 Collect ALL target files before proceeding to Step 2.
 
@@ -752,11 +763,12 @@ Identify which definitions apply to this UML.
 
 For each classified element, use the matching definition to generate output.
 
-1. **Discovery** — Apply the **file_management** definition to determine CREATE or UPDATE mode for every target file
-2. **Generate interfaces** — One per collaborator, using **language_profile** naming/placement + **file_management** mode
-3. **Generate tests** — For each UML element, apply its definition's test shape. Use **language_profile** templates.
-4. **Generate decision table skeletons** — For each **leaf_node** (computational only), generate a standalone test skeleton
-5. **Run quality_gate** — Pass all 4 Critical Checks before writing any files
+1. **Package detection** — Resolve `{basePackage}` using the **language_profile** Base Package Detection rules
+2. **Discovery** — Apply the **file_management** definition to determine CREATE or UPDATE mode for every target file
+3. **Generate interfaces** — One per collaborator, using **language_profile** naming/placement + **file_management** mode
+4. **Generate tests** — For each UML element, apply its definition's test shape. Use **language_profile** templates.
+5. **Generate decision table skeletons** — For each **leaf_node** (computational only), generate a standalone test skeleton
+6. **Run quality_gate** — Pass all 4 Critical Checks before writing any files
 
 ## Step 4: Implement (Tests → Code)
 
