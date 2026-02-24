@@ -1,19 +1,30 @@
 ---
 name: disc
-description: "Transform UML sequence diagrams into working Java code using the DisC (Design is Code) methodology: first generate tests from UML, then derive implementation from the tests."
+description: "Transform UML sequence diagrams into working code using the DisC methodology"
 disable-model-invocation: true
 ---
 
-You are executing the DisC (Design is Code) methodology. Transform the provided UML sequence diagram into working Java code: first generate tests from the UML, then derive implementation from the tests.
+You are executing the DisC (Design is Code) methodology. Transform the provided UML sequence diagram into working code: first generate tests from the UML, then derive implementation from the tests.
 
-### Why DisC Exists
+## Context
 
 AI generates code in seconds. Humans review code in hours. This asymmetry means AI produces faster than humans can verify — and unverified code is a liability. DisC solves this: the UML is a contract. Each arrow becomes a test. Tests force implementation structure. The human verifies the contract held by counting arrows against tests — a 30-second check, not an hours-long code review.
 
-### The Two Invariants
+**What DisC controls:**
+DisC constrains **how orchestrators call collaborators** — call order, arguments, data flow.
+It does NOT constrain **how pure functions compute their results** — only that they produce
+correct output for human-designed inputs.
 
-1. **Arrow = Test.** Every arrow in the UML becomes exactly one `verify()` test.
-2. **Implement from tests, not UML.** The implementation is derived by reading the test's `verify()` calls and `when().thenReturn()` chains. The UML is consumed only during test generation. Implementation reads the tests.
+**What DisC does NOT guarantee:**
+DisC verifies the design contract. It does NOT verify runtime correctness (a real repository
+throwing, a real mapper transforming incorrectly). Runtime correctness requires integration
+tests. DisC and integration tests are complementary, not substitutes.
+
+**The two invariants** — every other rule derives from these:
+
+1. **Arrow = Test.** Every `call_arrow` in the UML becomes exactly one `verify_test`. The count of `call_arrow`s in the diagram must equal the count of `verify_test`s in the generated tests.
+
+2. **Implement from tests, not UML.** The transformation has two phases separated by a wall. Phase 1 (UML → tests) consumes the diagram. Phase 2 (tests → implementation) reads only the tests. The UML is never consulted during implementation. This two-phase wall ensures the implementation structure matches what the tests demand.
 
 ### Input
 
@@ -23,879 +34,382 @@ $ARGUMENTS
 
 ---
 
-# Section 1: Definitions
+## Concepts
 
-Each definition is a self-contained, referenceable block. The router (Section 2) dispatches to these definitions — they don't prescribe order or process.
+Every later reference uses the exact snake_case name defined here.
 
-> **What DisC Controls**
->
-> | Component type | DisC dictates... | Test style |
-> |---|---|---|
-> | **Orchestrator** (has outgoing arrows to other participants) | Structure — call order, arguments, wiring | `verify()` tests — one per arrow |
-> | **Pure function / leaf node** (no outgoing arrows) | Correctness only — input/output examples | `assertThat()` decision table tests — human designs the examples |
->
-> DisC constrains **how orchestrators call collaborators**. It does NOT constrain **how pure functions compute their results** — only that they produce correct output for human-designed inputs.
+### UML Elements
+
+- **`call_arrow`** — An arrow from caller to callee representing a method invocation. Labeled with a method call: `A -> B: method(arg)`. May appear as solid (`->`) or plain arrow. Identified by its label format: a method name followed by parentheses.
+
+- **`return_arrow`** — An arrow from callee back to caller representing a returned value. Labeled with a value: `B --> A: value` or `B --> A: value : Type`. May appear as dashed (`-->`) or plain arrow. Identified by direction (back to the original caller) and label format (a value name, no parentheses).
+
+- **`participant`** — A named box in the diagram.
+
+- **`loop_block`** — A `loop` / `end` fragment wrapping one or more arrows.
+
+- **`branch_block`** — An `alt` / `else` / `end` fragment with multiple paths.
+
+- **`throw_arrow`** — A self-arrow (from a `participant` to itself) labeled `<<throws>> ExceptionType`.
+
+### Distinguishing `call_arrow` from `return_arrow`
+
+When arrow styles are identical, use three signals:
+
+1. **Label format** — A `call_arrow` has parentheses in its label: `method(arg)`. A `return_arrow` has a value name with no parentheses: `result` or `result : Type`.
+2. **Direction** — A `call_arrow` goes forward (caller to new callee). A `return_arrow` goes back to the original caller.
+3. **Pairing** — A `return_arrow` always follows a `call_arrow` to the same callee and returns to the same caller.
+
+### Participant Roles
+
+- **`component_under_test`** — The first `participant` in the diagram. Not mocked. Instantiated in tests.
+
+- **`collaborator`** — Any `participant` other than the `component_under_test`. Mocked in tests. Injected into the `component_under_test` via its constructor.
+
+- **`orchestrator`** — A `participant` that has outgoing `call_arrow`s to other participants. DisC dictates its implementation structure: call order, arguments, and data flow are all fixed by tests.
+
+- **`leaf_node`** — A `participant` with no outgoing `call_arrow`s. Its internal algorithm is unconstrained. DisC verifies its correctness via input/output examples, not its structure.
+
+### Test Concepts
+
+- **`interaction`** — One `call_arrow` paired with its optional `return_arrow`. The atomic unit of DisC.
+
+- **`verify_test`** — A test asserting that a `collaborator` method was called with expected arguments. One `verify_test` per `call_arrow`.
+
+- **`result_test`** — A test asserting that the `component_under_test`'s return value equals an expected value. One `result_test` per final `return_arrow` (the last `return_arrow` back to the `component_under_test`).
+
+- **`stub`** — Configuring what a `collaborator` returns when called. One `stub` per `return_arrow`. Wired in test setup before execution.
+
+- **`data_mock`** — A mock representing a return value or input data. It is NOT a `collaborator`. It does NOT appear in the constructor. It exists only to carry identity through the `data_pipe`.
+
+- **`test_group`** — A scoped collection of tests sharing setup. One `test_group` per method when a `component_under_test` has multiple methods, or one `test_group` per branch when a `branch_block` is present.
+
+- **`decision_table`** — A set of input/output examples for a `leaf_node`. Human-designed, not AI-generated. Each row becomes one test with a direct assertion on the return value.
+
+### Data Flow
+
+- **`data_pipe`** — The `return_arrow` value of one `interaction` becomes the argument of the next `interaction`. When a `return_arrow` labels a value `x`, and a subsequent `call_arrow` uses `x` as an argument, those two `interaction`s are connected by a `data_pipe`.
+
+### Exception Handling
+
+- **`throw_placement`** — The rule governing where the method-under-test is called when a `throw_arrow` is present:
+  - **Happy path:** The method is called in setup (before individual tests run).
+  - **Exception path:** The method is called inside the assertion that expects the exception. If the method were called in setup, the exception would abort setup and no assertions would execute.
 
 ---
 
-## Definition: participant
+## Transformation Rules
 
-**Trigger:** `participant X` or named box in the diagram.
+Each rule describes how a UML element transforms into test and implementation constructs, using only the concepts defined above.
 
-**Test shape:**
-- The FIRST participant is the class under test → instantiated in `@BeforeEach` via constructor injection.
-- All other participants → `@Mock private [Type] [name];`
+### `participant` to role
 
-**Impl shape:**
-- First participant → `Default[Name]` implementation class with `private final` fields for each collaborator.
-- Each collaborator → constructor parameter.
+The first `participant` is the `component_under_test`. It is instantiated in test setup via constructor injection of all `collaborator`s.
 
-**Classify each participant (except first):**
+Every other `participant` is a `collaborator`. Each `collaborator` becomes a mock in the test and a constructor parameter of the `component_under_test`.
 
-| Participant has... | Classification | Test style |
+### `interaction` with `return_arrow`
+
+An `interaction` that has a `return_arrow` produces:
+- One `stub` in setup: configure the `collaborator` to return a `data_mock` when called.
+- One `verify_test`: assert the `collaborator` was called with the expected argument.
+
+The `return_arrow` label determines the `data_mock` name and type:
+- **Explicit format** `value : Type` — Split on ` : `. Left side is the variable name. Right side is the type.
+- **Inferred format** `value` — The variable name is the label. The type is inferred by capitalizing the first letter of each word (e.g., `product` becomes type `Product`).
+- Prefer explicit format. It eliminates ambiguity (e.g., `savedOrder : Order` is clear, while inferring a type name from `savedOrder` alone is not).
+
+### `interaction` without `return_arrow` (void)
+
+A `call_arrow` with no following `return_arrow` produces:
+- No `stub` (nothing to configure).
+- One `verify_test`: assert the `collaborator` was called with the expected argument.
+
+### Final `return_arrow`
+
+The last `return_arrow` back to the `component_under_test` produces:
+- A result variable in the test to capture the return value.
+- The method-under-test is called in test setup, and its return value is stored.
+- One `result_test`: assert the captured result equals the expected `data_mock`.
+
+In implementation, this becomes the method's return statement.
+
+### `data_pipe`
+
+When a `return_arrow` labels its value `x`, and a subsequent `call_arrow` uses `x` as an argument, the `data_mock` named `x` flows from the `stub` of the first `interaction` into the `verify_test` of the second `interaction`.
+
+In implementation, this means the return value of one method call is passed as the argument to the next method call.
+
+### `loop_block`
+
+A `loop_block` wrapping one or more arrows transforms as follows:
+- Test data uses a single-element collection so iteration executes once.
+- Each `call_arrow` inside the `loop_block` still produces one `verify_test`, verified for the single element.
+- In implementation, the `loop_block` becomes an iteration construct over the collection.
+
+### `branch_block`
+
+An `alt` / `else` / `end` fragment with multiple paths transforms as follows:
+- Each branch becomes a separate `test_group` with its own setup.
+- Each `test_group` configures `stub`s that drive execution down that specific branch.
+- Each branch has its own `verify_test`s matching only that branch's `call_arrow`s.
+- The method-under-test is called in each branch's `test_group` setup independently.
+- In implementation, the `branch_block` becomes a conditional.
+
+### `throw_arrow`
+
+A self-arrow labeled `<<throws>> ExceptionType` produces two `test_group`s governed by the `throw_placement` rule:
+
+**Happy path `test_group`:**
+- `stub`s are configured to avoid the exception condition.
+- The method-under-test is called in shared test setup (before individual tests run).
+- `verify_test`s assert `collaborator` calls happened.
+
+**Exception path `test_group`:**
+- `stub`s are configured to trigger the exception condition.
+- The method-under-test is NOT called in shared test setup. It is called inside the test that asserts the exception is thrown.
+- The test asserts both the exception type and (when specified in the UML) the exception message.
+
+When the UML specifies a message template in the `throw_arrow`:
+- The error message is declared as a constant in the implementation.
+- The test references that constant directly — single source of truth, no string duplication.
+
+### `leaf_node`
+
+A `participant` with no outgoing `call_arrow`s is a `leaf_node`. It is classified into one of two sub-types:
+
+| Sub-type | Characteristics | DisC action |
 |---|---|---|
-| Outgoing solid arrows to other participants | Orchestrator collaborator | Mock + verify() in consumer's test; own DisC test later |
-| NO outgoing solid arrows | Pure function (leaf node) | Mock + verify() in consumer's test; own decision table test later |
+| **Computational** | Computes results from inputs (mappers, factories, calculators, converters, builders) | Generate a `decision_table` skeleton. Human fills in test cases. |
+| **I/O boundary** | Interacts with external systems (repositories, clients, gateways, adapters) | Mocked in consumer tests only. No standalone DisC test. I/O boundary leaf nodes are tested via integration tests, not DisC. |
 
-Both types get mocked in the consumer's test. The difference is what happens when you later test the collaborator itself.
+For computational `leaf_node`s:
+- Tests use direct assertions on return values. No mocks. No `verify_test`s.
+- Test cases are marked for human review. AI must NOT invent both test cases and implementation.
+- The algorithm is unconstrained — any implementation that passes the `decision_table` is valid.
 
-**Checklist:**
-- [ ] Every collaborator has an `@Mock` field
-- [ ] Constructor injection includes ALL collaborators (and only collaborators)
-
----
-
-## Definition: interaction
-
-**Trigger:** Any `A -> B: method(arg)` solid arrow, optionally paired with `B --> A: value` dashed return.
-
-Each solid arrow produces exactly one `verify()` test. Processing depends on whether there is a return:
-
-**Return label parsing:** The dashed return label supports two formats:
-
-| Format | Example label | Variable name | Type |
-|---|---|---|---|
-| `variable : Type` (explicit) | `greeting : Greeting` | `greeting` | `Greeting` |
-| `variable` (inferred) | `greeting` | `greeting` | `Greeting` (PascalCase of variable) |
-
-When the label contains ` : `, split on ` : ` — left side is the variable name (camelCase), right side is the explicit type. When no ` : ` is present, infer the type by converting the variable name to PascalCase. Prefer explicit syntax — it eliminates ambiguity (e.g., `savedOrder : Order` vs inferring `SavedOrder`).
-
-**With return** (`A -> B: method(arg)` + `B --> A: value`):
-- **Test setup:** `when([collaborator].[method](any())).thenReturn([returnValue]);` in `@BeforeEach`
-- **Test:** `verify([collaborator]).[method]([expectedArg]);`
-- **Impl:** `[ReturnType] [var] = [collaborator].[method]([arg]);`
-- The return value becomes a `@Mock` field (or real value for primitives/final classes like `UUID`, `Integer`, `String`).
-
-**Void — no return** (solid arrow with NO following dashed return):
-- **Test setup:** No `when().thenReturn()` for this call
-- **Test:** `verify([collaborator]).[method]([expectedArg]);` — still exists
-- **Impl:** `[collaborator].[method]([arg]);` — no return capture
-
-**Final return** (last dashed arrow back to the first participant):
-- **Result field:** `private [FinalReturnType] result;`
-- **Method invocation in `@BeforeEach`:** `result = default[ServiceName].[methodName]([input]);`
-- **Final assertion test:** `assertThat(result).isEqualTo([expectedReturnMock]);`
-- **Impl:** The `return` statement of the method
-
-**Data flow rule (pipe pattern):** The return value named in a dashed arrow becomes the argument when that same name appears in a subsequent solid arrow. Example: `B --> A: product` followed by `A -> C: save(product)` — the variable `product` flows from the first call's return into the second call's argument. If names differ, look for an intermediate arrow.
-
-**Checklist:**
-- [ ] Count of solid arrows == count of `verify()` tests
-- [ ] Each `when().thenReturn()` corresponds to a dashed return arrow
-- [ ] Arrow label → exact method name + args in `verify()`
-- [ ] Data flow: return value names feed correctly into subsequent arrow arguments
-- [ ] Implementation calls methods in the same order as `verify()` tests appear
-- [ ] Every mock data object has an `@Mock` field (or real value for primitives/final classes)
-- [ ] Return label types: use explicit `: Type` when present; PascalCase inference only when omitted
+**Dual testing rule:** In the consumer's test, a `leaf_node` is still a mocked `collaborator` with `verify_test`s. It also gets its own standalone `decision_table` test. These serve different purposes: the consumer's test verifies orchestration wiring; the `decision_table` verifies computational correctness.
 
 ---
 
-## Definition: loop
+## Constraints
 
-**Trigger:** `loop` / `end` block in UML (e.g., `loop for each lineItem`)
+### N-path complexity
 
-**Test shape:**
-- Mock inputs use `List.of()` with a single element so iteration happens once.
-- `verify()` confirms the call happens with the correct arguments for that single element.
-- For primitives like `UUID` and `Integer` that cannot be mocked, use real values: `UUID.randomUUID()`, `(int)(Math.random() * 1000)`.
+If a `branch_block` nests 3 or more levels deep, the transformation breaks down. The number of `test_group`s grows exponentially. This is a design smell, not a DisC limitation. The remedy is to refactor the design using patterns that flatten branching (strategy, factory, resolver) before applying DisC.
 
-**Impl shape:**
-```java
-// forEach or stream iteration
-items.forEach(item -> {
-    [collaborator].[method](item);
-});
-```
+### False positive risk
 
-**Checklist:**
-- [ ] Loop test data uses `List.of()` with a single element
-- [ ] Primitives/final classes use real values, not mocks
+When AI generates both test cases and implementation for a `leaf_node`, it can produce matching pairs that pass but do not reflect actual requirements. AI writes: test expects X, implementation returns X. But the human needed Y.
 
-**Example: Builder + Iteration**
+Prevention: humans design `decision_table` test cases. AI implements only.
 
-**UML Input:**
-```
-SaleService -> ProductService: getProductByIds(productIds)
-ProductService --> SaleService: products
-SaleService -> ProductService: throwExceptionIfProductNoExist(productIds)
-SaleService -> SaleBuilderFactory: create()
-SaleBuilderFactory --> SaleService: saleBuilder
-loop for each lineItem
-    SaleService -> SaleBuilder: with(product, quantity)
-end
-SaleService -> SaleBuilder: build()
-SaleBuilder --> SaleService: sale
-SaleService -> SaleResponseFactory: create(sale)
-SaleResponseFactory --> SaleService: saleResponse
-```
+### Dual testing
 
-**Key test patterns for loop (excerpt):**
-```java
-// Primitives — real values, not mocks
-private final UUID productId = UUID.randomUUID();
-private final Integer quantity = (int) (Math.random() * 1000);
+A `leaf_node` appears in two places:
+1. As a mocked `collaborator` in its consumer's `verify_test`s (testing orchestration).
+2. In its own standalone `decision_table` test (testing correctness).
 
-// List.of() with single element — iteration happens once
-when(saleRequest.getLineItems()).thenReturn(List.of(saleLineItemRequest));
-when(productService.getProductByIds(any())).thenReturn(List.of(product));
+Both are necessary. Neither substitutes for the other.
 
-// verify() for the call inside the loop
-@Test void shouldBuildWithProductAndQuantity() { verify(saleBuilder).with(product, quantity); }
-```
+### One test, one assertion
+
+Each test contains exactly one `verify_test` OR one `result_test`. Never both. Never multiple. When a test fails, you know exactly which `interaction` broke.
+
+### No logic in tests
+
+Tests contain no conditionals, no loops, no branching. Tests are declarative: setup executes, then each test verifies one thing.
+
+### `return_arrow` label parsing
+
+Prefer the explicit ` : Type` format over inferring the type from the variable name. Explicit typing eliminates ambiguity and makes the `data_mock` type unambiguous to any reader of the diagram.
 
 ---
 
-## Definition: branching
+## The Pipeline
 
-**Trigger:** `alt` / `else` / `end` block in UML.
+Execute these eight steps in order. Each step must complete before the next begins.
 
-**Test shape:**
-- Each branch becomes a separate `@Nested` class.
-- The branch condition determines the mock setup (different `when().thenReturn()` values).
-- Each `@Nested` class has its own `@BeforeEach` with branch-specific setup and method invocation.
+### Step 1: Validate UML
 
-**Impl shape:**
-```java
-if ([condition]) {
-    // branch 1
-} else {
-    // branch 2
-}
-```
+Parse the input diagram. For each element, confirm it matches a concept defined in the Concepts section above:
 
-**Checklist:**
-- [ ] One `@Nested` class per `alt`/`else` branch
-- [ ] Each branch's `@BeforeEach` has correct mock setup for that path
-- [ ] Each branch has its own `verify()` calls matching only that branch's arrows
+`participant` · `call_arrow` · `return_arrow` · `loop_block` · `branch_block` · `throw_arrow`
 
-**N-path complexity warning:** If the UML has nested `alt`/`else` blocks (branches within branches), this is a design smell. The number of `@Nested` classes grows exponentially. Suggest the human simplify the design using resolver, strategy, or factory patterns before generating code. A linear flow with one level of branching is the sweet spot.
+Use the disambiguation rules ("Distinguishing `call_arrow` from `return_arrow`") when arrow styles are identical.
 
-**Example: Branching (Update or Create)**
+**Refusal protocol** — if any element is unsupported or ambiguous:
 
-**UML Input:**
-```
-OrderService -> OrderRepository: findById(orderId)
-OrderRepository --> OrderService: existingOrder
-alt [existingOrder is present]
-    OrderService -> OrderMapper: updateEntity(existingOrder, request)
-    OrderMapper --> OrderService: updatedOrder
-    OrderService -> OrderRepository: save(updatedOrder)
-    OrderRepository --> OrderService: savedOrder
-else [not found]
-    OrderService -> OrderMapper: toEntity(request)
-    OrderMapper --> OrderService: newOrder
-    OrderService -> OrderRepository: save(newOrder)
-    OrderRepository --> OrderService: savedOrder
-end
-```
+1. **STOP** — do not generate code
+2. **EXPLAIN** — describe what is unsupported, referencing the concept definitions
+3. **SUGGEST** — propose how to restructure using supported concepts
 
-**Generated Test:**
-```java
-@MockitoSettings(strictness = Strictness.LENIENT)
-class DefaultOrderServiceTest {
+Refuse when:
+- An arrow has no method name label
+- A fragment type is not defined (`par`, `critical`, `break` are not supported)
+- Circular arrows exist with no clear entry point
+- Participant names don't follow naming conventions
 
-    @Mock private OrderRepository orderRepository;
-    @Mock private OrderMapper orderMapper;
+### Step 2: Classify
 
-    @Mock private OrderRequest request;
-    @Mock private Order existingOrder;
-    @Mock private Order updatedOrder;
-    @Mock private Order newOrder;
-    @Mock private Order savedOrder;
-    private UUID orderId;
-    private Order result;
+Identify which concepts apply:
 
-    DefaultOrderService defaultOrderService;
+1. List all `participant`s → classify each as `component_under_test`, `orchestrator`, or `leaf_node`
+2. List all `call_arrow`s → each is an `interaction`
+3. Identify `loop_block`s, `branch_block`s, `throw_arrow`s
+4. Sub-classify each `leaf_node`:
 
-    @BeforeEach
-    void setUp() {
-        orderId = UUID.randomUUID();
-        defaultOrderService = new DefaultOrderService(orderRepository, orderMapper);
-    }
-
-    @Nested
-    class WhenOrderExists {
-
-        @BeforeEach
-        void setUp() {
-            when(orderRepository.findById(any())).thenReturn(Optional.of(existingOrder));
-            when(orderMapper.updateEntity(any(), any())).thenReturn(updatedOrder);
-            when(orderRepository.save(any())).thenReturn(savedOrder);
-            result = defaultOrderService.createOrUpdate(orderId, request);
-        }
-
-        @Test void shouldFindById() { verify(orderRepository).findById(orderId); }
-        @Test void shouldUpdateEntity() { verify(orderMapper).updateEntity(existingOrder, request); }
-        @Test void shouldSaveUpdatedOrder() { verify(orderRepository).save(updatedOrder); }
-        @Test void shouldReturnSavedOrder() { assertThat(result).isEqualTo(savedOrder); }
-    }
-
-    @Nested
-    class WhenOrderNotFound {
-
-        @BeforeEach
-        void setUp() {
-            when(orderRepository.findById(any())).thenReturn(Optional.empty());
-            when(orderMapper.toEntity(any())).thenReturn(newOrder);
-            when(orderRepository.save(any())).thenReturn(savedOrder);
-            result = defaultOrderService.createOrUpdate(orderId, request);
-        }
-
-        @Test void shouldFindById() { verify(orderRepository).findById(orderId); }
-        @Test void shouldMapToEntity() { verify(orderMapper).toEntity(request); }
-        @Test void shouldSaveNewOrder() { verify(orderRepository).save(newOrder); }
-        @Test void shouldReturnSavedOrder() { assertThat(result).isEqualTo(savedOrder); }
-    }
-}
-```
-
-**Each branch: 3 solid arrows = 3 verify() tests + 1 assertThat = 4 tests per branch. Different `when()` setup drives different code paths.**
-
----
-
-## Definition: guard_clause
-
-**Trigger:** A dashed self-arrow from a participant to itself labeled `<<throws>> ExceptionType`, typically inside an `alt` fragment.
-
-**Test shape — THREE critical rules:**
-
-1. **Method invocation placement:** Happy path calls the method in `@BeforeEach`. Exception path calls it inside `assertThatThrownBy` in the `@Test`. Never call a throwing method in `@BeforeEach` — the exception would abort setup.
-2. **`.hasMessage()` verification:** When the UML specifies a message template (e.g., `<<throws>> ResourceInUseException("...%s...")`), chain `.hasMessage(CONSTANT.formatted(...))` after `.isInstanceOf()`.
-3. **`protected static final` constant:** Declare the error message as `protected static final String` in the implementation. The test imports it directly — single source of truth, no string duplication.
-
-```java
-// Happy path @Nested — method called in @BeforeEach
-@Nested
-class NoUsage {
-    @BeforeEach
-    void setUp() {
-        when([collaborator].[method](any())).thenReturn(Collections.emptyList());
-        // Happy path — method called in @BeforeEach
-        default[ServiceName].[methodName]([args]);
-    }
-
-    @Test
-    void should[VerifyCall]() {
-        verify([collaborator]).[method]([args]);
-    }
-}
-
-// Exception path @Nested — method called inside assertThatThrownBy
-@Nested
-class Usage {
-    @BeforeEach
-    void setUp() {
-        when([collaborator].[method](any())).thenReturn(List.of([mockItem]));
-        // Exception path — @BeforeEach only wires mocks, does NOT call method
-    }
-
-    @Test
-    void shouldThrowException() {
-        assertThatThrownBy(() -> default[ServiceName]
-            .[methodName]([args]))
-            .isInstanceOf([ExceptionType].class)
-            .hasMessage([CONSTANT].formatted([args]));
-    }
-}
-```
-
-**Impl shape:**
-```java
-@Override
-public void [methodName]([params]) {
-    [ReturnType] [result] = [collaborator].[method]([params]);
-    if (![result].isEmpty()) {
-        throw new [ExceptionType](
-            [CONSTANT].formatted([args]));
-    }
-}
-```
-
-**Checklist:**
-- [ ] Guard clause method invocation placement: exception path calls method inside `assertThatThrownBy`, NOT in `@BeforeEach`
-- [ ] `.hasMessage()` verification chained when UML specifies a message template
-- [ ] Error message constants declared as `protected static final String` in the implementation class
-
-**Example: Guard Clause / Validator with Exception**
-
-**UML Input:**
-```
-ResourceUsageValidator -> ResourceUsageService: getResourceUsages(organizationId, resourceId, resourceType)
-ResourceUsageService --> ResourceUsageValidator: resourceUsages
-alt [resourceUsages is not empty]
-    ResourceUsageValidator -> ResourceUsageValidator: <<throws>> ResourceInUseException
-end
-```
-
-**Generated Test:**
-```java
-@MockitoSettings(strictness = Strictness.LENIENT)
-class DefaultResourceUsageValidatorTest {
-
-    @Mock private ResourceUsageService resourceUsageService;
-    @Mock private ResourceUsageDetail resourceUsageDetails;
-
-    private UUID organizationId;
-    private String resourceType;
-    private String resourceId;
-    private DefaultResourceUsageValidator defaultResourceUsageValidator;
-
-    @BeforeEach
-    void setUp() {
-        organizationId = randomUUID();
-        resourceType = getRandomString();
-        resourceId = getRandomString();
-        defaultResourceUsageValidator = new DefaultResourceUsageValidator(resourceUsageService);
-    }
-
-    @Nested
-    class NoUsage {
-        @BeforeEach
-        void setUp() {
-            when(resourceUsageService.getResourceUsages(any(), any(), any()))
-                .thenReturn(Collections.emptyList());
-            // RULE 1: Happy path — method called in @BeforeEach
-            defaultResourceUsageValidator.validate(organizationId, resourceId, resourceType);
-        }
-
-        @Test
-        void shouldGetResourceUsage() {
-            verify(resourceUsageService).getResourceUsages(organizationId, resourceId, resourceType);
-        }
-    }
-
-    @Nested
-    class Usage {
-        @BeforeEach
-        void setUp() {
-            when(resourceUsageService.getResourceUsages(any(), any(), any()))
-                .thenReturn(List.of(resourceUsageDetails));
-            // RULE 2: Exception path — @BeforeEach only wires mocks, does NOT call method
-        }
-
-        @Test
-        void shouldThrownException() {
-            // RULE 3: Method called INSIDE assertThatThrownBy with .hasMessage()
-            assertThatThrownBy(() -> defaultResourceUsageValidator
-                .validate(organizationId, resourceId, resourceType))
-                .isInstanceOf(ResourceInUseException.class)
-                .hasMessage(RESOURCE_IN_USE_ERROR_MESSAGE.formatted(resourceType, resourceId));
-        }
-    }
-}
-```
-
-**1 solid arrow + 1 self-arrow with `<<throws>>` = 1 verify() test + 1 assertThatThrownBy test = 2 total tests.**
-
----
-
-## Definition: leaf_node
-
-**Trigger:** A participant that is ONLY a target of arrows (never the source of a solid arrow to another participant).
-
-**Classify the leaf node:**
-
-| Leaf node type | Name ends in... | DisC action |
+| Sub-type | Name ends in... | DisC action |
 |---|---|---|
-| **Computational** (pure function) | `Mapper`, `Factory`, `Calculator`, `Converter`, `Builder` | Decision table test skeleton (human fills in) |
-| **I/O boundary** | `Repository`, `Client`, `Gateway`, `Adapter` | Mocked in consumer only — no standalone DisC test |
+| **Computational** | Mapper, Factory, Calculator, Converter, Builder | `decision_table` skeleton (human fills in) |
+| **I/O boundary** | Repository, Client, Gateway, Adapter | Mocked in consumer only — no standalone test |
 
-I/O boundary leaf nodes are tested via integration tests, not DisC. Generating a decision table for a JPA repository would be testing Spring Data, not your code.
+### Step 3: Discover Context
 
-**Test shape — Decision table skeleton (computational leaf nodes only, no mocks):**
-```java
-class Default[PureFunctionName]Test {
+**3a. Detect language/framework** — Determine which language profile to load:
 
-    private [PureFunctionName] [instance] = new Default[PureFunctionName]();
+1. If the user specifies a language/framework, use that.
+2. Otherwise, detect from project files:
 
-    // TODO: Human must fill in the decision table.
-    // DisC CANNOT dictate the implementation of pure functions.
-    // Only the human-designed examples constrain the output.
+| Signal files | Language profile |
+|---|---|
+| `build.gradle`, `pom.xml`, `*.java` | `java_spring.md` |
 
-    @Test void shouldHandleBaseCase() {
-        assertThat([instance].[method]([baseInput]))
-            .isEqualTo([expectedBaseOutput]); // ← Human fills this in
-    }
+3. If no signal matches or multiple match, ask the user.
 
-    @Test void shouldHandleEdgeCase() {
-        assertThat([instance].[method]([edgeInput]))
-            .isEqualTo([expectedEdgeOutput]); // ← Human fills this in
-    }
-}
-```
+Load the matched language profile. All subsequent steps use its conventions.
 
-Mark these with `// TODO` comments — the human must design the test cases. AI should NOT invent both test cases and implementation for pure functions (false positive risk).
+**3b. Detect base package** — Follow the language profile's base package detection rules.
 
-**Impl shape:**
-```java
-// Pure function — algorithm is unconstrained
-public class DefaultProportionalAllocation implements ProportionalAllocation {
-    @Override
-    public List<BigDecimal> allocate(BigDecimal total, List<BigDecimal> bases) {
-        // Any algorithm that produces correct output is valid
-        // The decision table tests verify correctness, not structure
-    }
-}
-```
+**3c. Derive all target file paths** — Use the language profile's naming conventions, package placement rules, and file path patterns to derive paths from participant names and domain types in `return_arrow` labels.
 
-- **No `verify()` calls to read** — there's no call order to follow
-- **Algorithm is free** — any implementation that passes the decision table is valid
-- **Human-designed test cases constrain output**, not structure
+**3d. Check file existence** — Glob all target paths.
 
-**Dual testing rule:** In the consumer's test, leaf nodes are still `@Mock` fields with `verify()` calls. They ALSO get their own standalone decision table test.
+**3e. For each existing file:** read it, identify what's already there (mocks, test groups, methods, signatures).
 
-**Checklist:**
-- [ ] Leaf node participants identified (no outgoing arrows = pure function)
-- [ ] Pure function test skeletons use `assertThat()`, not `verify()`
-- [ ] Pure function test cases marked with TODO for human review
-- [ ] Dual testing: pure functions are both mocked (in consumer) AND get their own tests
+**3f. Set mode per file:** NEW → **CREATE**, EXISTS → **UPDATE**
 
----
+### Step 4: Generate (apply Transformation Rules)
 
-## Definition: language_profile
+For each classified element, apply its transformation rule from the Transformation Rules section above:
 
-Swap this section to change the target language/framework. All language-specific templates and conventions live here.
-
-**Target: Java / Spring Boot**
-
-### Base Package Detection
-
-`{basePackage}` and `{basePackagePath}` appear throughout this profile. Resolve them BEFORE generating any code:
-
-1. Search for the class annotated with `@SpringBootApplication` — its package IS the base package
-2. If not found, glob for `src/main/java/**/*.java`, read package statements, and use the common prefix
-3. If no Java files exist, check `build.gradle` for `group` or `pom.xml` for `<groupId>`
-4. If still unresolvable, ask the user
-
-`{basePackagePath}` is `{basePackage}` with `.` replaced by `/` (e.g., `com.acme.orders` → `com/acme/orders`).
-
-### Naming Conventions
-
-| Element | Convention | Example |
+| Element | Rule | Produces |
 |---|---|---|
-| Interface | PascalCase, from participant name | `OrderService` |
-| Implementation class | `Default` + interface name | `DefaultOrderService` |
-| Test class | Implementation name + `Test` | `DefaultOrderServiceTest` |
-| Test method | `should` + verb phrase describing interaction | `shouldSaveOrder` |
-| Mock field (collaborator) | camelCase of interface name | `orderMapper` |
-| Mock field (data) | Variable name from return label. Type from explicit `: Type` or PascalCase inference | `savedOrder : Order` → field: `Order savedOrder` |
+| `participant` | "participant to role" | Mocks, constructor wiring |
+| `interaction` + `return_arrow` | "interaction with return_arrow" | `stub` + `verify_test` |
+| `interaction` (void) | "interaction without return_arrow" | `verify_test` only |
+| Final `return_arrow` | "Final return_arrow" | `result_test` |
+| `data_pipe` | "data_pipe" | Return value → next argument |
+| `loop_block` | "loop_block" | Single-element collection, iteration |
+| `branch_block` | "branch_block" | Separate `test_group` per branch |
+| `throw_arrow` | "throw_arrow" | Two `test_group`s with `throw_placement` |
+| `leaf_node` (computational) | "leaf_node" | `decision_table` skeleton |
 
-### Domain Type Rule — Abstractions Depend on Abstractions
+Use the language profile's test class template and naming conventions.
 
-Any type that appears in an interface method signature (parameter or return type)
-and represents a **domain concept** is itself generated as an **interface**, not a class.
+**Generation order:** domain types → interfaces → tests → `decision_table` skeletons
 
-This enforces Dependency Inversion Principle part B: abstractions should not depend
-on details.
+### Step 5: Quality Gate
 
-**Rule:** When a return label or parameter names a domain type, generate it as an interface:
-- `Order.java` → `public interface Order {}`
-- Do NOT generate `DefaultOrder.java` — the concrete class is a human concern
-  (its fields and persistence mapping are domain/infra decisions DisC cannot make)
+Before writing anything, pass every check. Fix generated code if any check fails.
 
-**Exceptions — NOT domain types, leave as-is:**
-| Type category | Examples | Reason |
-|---|---|---|
-| Java standard primitives/wrappers | `UUID`, `String`, `Integer`, `Long`, `Boolean` | Not invented by the domain |
-| Java standard generics | `Optional<T>`, `List<T>`, `Map<K,V>`, `Set<T>` | Standard library |
-| Framework types | Spring, JPA types | External contract |
-| `*Request`, `*Response`, `*DTO` | `CreateOrderRequest`, `ProductDTO` | Boundary data carriers — structure IS the contract |
+**Self-reflection protocol:** Iterate your output until you rate it 10/10 against an internal rubric before proceeding. Do not infer patterns not defined in this methodology.
 
-**Effect on tests:** No change. `@Mock private Order order;` mocks interfaces natively.
+**Four critical checks:**
 
-### Package Placement
+1. **Arrow parity** — `call_arrow` count == `verify_test` count. Each `stub` has a corresponding `return_arrow`. The `result_test` matches the final return value.
 
-| Suffix | Package | Example |
-|---|---|---|
-| `*Service` | `{basePackage}.service` | `OrderService.java` |
-| `*Repository` | `{basePackage}.repository` | `OrderRepository.java` |
-| `*Mapper` | `{basePackage}.mapper` | `OrderMapper.java` |
-| `*Factory` | `{basePackage}.factory` | `OrderFactory.java` |
-| `*Builder` | `{basePackage}.builder` | `SaleBuilder.java` |
-| `*Controller` | `{basePackage}.controller` | `OrderController.java` |
-| Entity/model types | `{basePackage}.entity` or `{basePackage}.model` | `Order.java` |
-| `*Request`, `*Response`, `*DTO` | `{basePackage}.model` | `CreateOrderRequest.java` |
-| Test classes | Same package as implementation, under `src/test/java` | `DefaultOrderServiceTest.java` |
+2. **Data flow integrity** — Each `data_pipe` connects correctly. Implementation call order matches `verify_test` order. Variable names match `data_mock` names.
 
-If a suffix doesn't match any rule, use `{basePackage}.service` as the default.
+3. **File mode correctness** — Step 3 discovery complete. CREATE → Write tool. UPDATE → Edit tool. No existing content modified, moved, or deleted. No duplicate mock fields or test groups.
 
-### File Paths
+4. **Pattern rules:**
+   - Every `collaborator` has a mock field; constructor includes all `collaborator`s and only `collaborator`s
+   - Every `data_mock` has a mock field (or real value for primitives/final classes)
+   - `throw_placement` correct (exception path calls method inside assertion, not in setup)
+   - Error message constants declared in implementation, referenced by test
+   - `leaf_node`s classified (computational vs I/O); standalone tests use direct assertions, not `verify_test`s
+   - `decision_table` skeletons marked TODO for human review
+   - `leaf_node`s both mocked in consumer AND get standalone tests (dual testing)
+   - Each `branch_block` has one `test_group` per branch with branch-specific `stub` setup
+   - `loop_block` test data uses single-element collection
+   - Primitives/final classes use real values, not mocks
 
-- Interface: `src/main/java/{basePackagePath}/[package]/[ServiceName].java`
-- Test: `src/test/java/{basePackagePath}/[package]/Default[ServiceName]Test.java`
-- Implementation: `src/main/java/{basePackagePath}/[package]/Default[ServiceName].java`
+### Step 6: Implement (two-phase wall)
 
-### Test Class Template
+**Re-read the test file. Do NOT reference the UML diagram.**
 
-```java
-package {basePackage}.service;
+Derive implementation entirely from the tests:
 
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Test;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoSettings;
-import org.mockito.quality.Strictness;
+1. Each `verify_test` → one method call in implementation, in order
+2. Each `stub` chain → capture return value, pass through `data_pipe`
+3. Return statement produces the value `result_test` expects
+4. Apply file mode from Step 3
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+Use the language profile's implementation template and conventions.
 
-@MockitoSettings(strictness = Strictness.LENIENT)
-class Default[ServiceName]Test {
+This enforces Invariant 2: implementation matches what tests demand, not what UML shows.
 
-    @Mock private [Collaborator1] [collaborator1];
-    @Mock private [Collaborator2] [collaborator2];
-    @Mock private [InputType] [input];
-    @Mock private [ReturnType1] [returnValue1];
-    private [FinalReturnType] result;
-    Default[ServiceName] default[ServiceName];
+### Step 7: Write Files
 
-    @BeforeEach
-    void setUp() {
-        default[ServiceName] = new Default[ServiceName]([collaborator1], [collaborator2]);
-    }
+**CREATE mode:** Write tool — complete file.
+**UPDATE mode:** Read tool first, then Edit tool — add only, never modify existing.
 
-    @Nested
-    class When[MethodName] {
-        @BeforeEach
-        void setUp() {
-            when([collaborator].method(any())).thenReturn([returnValue]);
-            result = default[ServiceName].[methodName]([input]);
-        }
+> **Never** use the Write tool on an existing file.
 
-        @Test void should[DescribeInteraction]() { verify([collaborator]).[method]([expectedArg]); }
-        @Test void shouldReturn[ExpectedResult]() { assertThat(result).isEqualTo([expectedReturnMock]); }
-    }
-}
+**Critical rule:** Existing content is sacred.
+
+Use the language profile's UPDATE mode rules per file type.
+
+### Step 8: Report
+
+**Summary:**
 ```
-
-### Implementation Template
-
-```java
-package {basePackage}.service;
-
-import org.springframework.stereotype.Service;
-
-@Service
-public class Default[ServiceName] implements [ServiceName] {
-    private final [Collaborator1] [collaborator1];
-    private final [Collaborator2] [collaborator2];
-
-    public Default[ServiceName]([Collaborator1] [collaborator1], [Collaborator2] [collaborator2]) {
-        this.[collaborator1] = [collaborator1];
-        this.[collaborator2] = [collaborator2];
-    }
-
-    @Override
-    public [ReturnType] [methodName]([InputType] [input]) {
-        // One line per verify() test, in order
-        [ReturnType1] [var1] = [collaborator1].method([input]);
-        [ReturnType2] [var2] = [collaborator2].method([var1]);
-        return [var2];
-    }
-}
-```
-
-### Implementation Annotations
-
-- Use `@Service` annotation (or `@Component` for non-service classes)
-- Constructor injection for all collaborators (no `@Autowired`)
-- One method call per `verify()` test, maintaining the order from the test
-- Variable names match the mock field names from the test
-- Return type matches the `result` field type in the test
-
-### Build Command
-
-```
-./gradlew test
-```
-
----
-
-## Definition: file_management
-
-All rules for creating vs. updating files live here. The router references this definition — it is never duplicated elsewhere.
-
-### Mode Detection
-
-Before generating anything, check if target files already exist.
-
-**Step 1: Derive target file paths** from two sources:
-- **Participant names** — using the language_profile file paths rules (as before)
-- **Domain types from return labels** — any type extracted from dashed return arrows
-  that is a domain type (per the Domain Type Rule in language_profile) also gets a
-  file path derived and checked. Use `{basePackage}.entity` as the package.
-
-Collect ALL target files before proceeding to Step 2.
-
-**Step 2: Check for pre-existing files** using Glob. For each file, record: **EXISTS** or **NEW**.
-
-**Step 3: If any file EXISTS, read it.** For every file marked EXISTS:
-1. Read the full file content
-2. Identify what already exists:
-   - **Test file:** existing `@Mock` fields, `@Nested` classes, `@Test` methods
-   - **Interface:** existing method signatures
-   - **Implementation:** existing methods, hand-written additions (logging, annotations, comments)
-
-**Step 4: Set mode per file:**
-
-| File status | Mode | Tool to use |
-|-------------|------|-------------|
-| NEW | CREATE | Write tool (create fresh file) |
-| EXISTS | UPDATE | Edit tool (add new content only; never touch existing content) |
-
-**Critical rule:** Existing content is sacred. Never modify, move, or delete anything that already exists in a file. Only ADD new content.
-
-### CREATE Mode Rules
-
-- Use the Write tool to create a new file
-- Generate the complete file content using templates from the language_profile definition
-
-### UPDATE Mode Rules
-
-| File type | What to ADD | What NOT to touch |
-|-----------|-------------|-------------------|
-| Interface | New method signature(s) only. Skip if already present. | Existing method signatures |
-| Test | New `@Nested` class (after last existing) + new `@Mock` fields only if not already declared | Existing `@Nested`, `@Test`, `@Mock`, setup code |
-| Implementation | New method + new `private final` fields + new constructor params (if new collaborator) | Existing methods, logging, annotations, comments |
-| Domain type interface (EXISTS) | Nothing — skip. Never overwrite. | All existing content |
-
-> **Domain type EXISTS as a class:** Do not convert it to an interface. Add a warning
-> comment in the Step 5 report: "⚠️ `[TypeName].java` exists as a class — consider
-> converting to an interface to satisfy DIP."
-
-### Writing Files
-
-- **CREATE mode files:** Use the Write tool (new file)
-- **UPDATE mode files:** Use the Read tool first (to confirm current state), then the Edit tool to insert new content at the correct location. NEVER use the Write tool on an existing file.
-
----
-
-## Definition: quality_gate
-
-Before writing any files, pass every item in this gate. If any item fails, fix the generated code before proceeding. Do not skip this step.
-
-### Self-Reflection Protocol
-
-Before writing, create an internal rubric for the generated code. Iterate your output until you rate it 10/10 against this rubric. Do not infer patterns that are not in the fragment definitions. If you are unsure how a UML element maps, check the definitions — if it's not there, apply the Refusal Protocol below.
-
-### Refusal Protocol
-
-When the UML is ambiguous, invalid, or uses unsupported fragment types:
-
-1. **STOP** — do not generate code from ambiguous or unsupported UML
-2. **EXPLAIN** — describe what is ambiguous or unsupported, referencing the fragment definitions
-3. **SUGGEST** — propose how to restructure the UML using supported fragments
-
-Examples of when to refuse:
-- UML arrow has no method name label
-- Fragment type not in the definitions (e.g., `par`, `critical`, `break` — not yet supported)
-- Circular arrows (A → B → A with no clear entry point)
-- Participant names that don't follow naming conventions
-
-### Error Handling for Unsupported Fragments
-
-If the UML contains a fragment type not listed in the definitions:
-1. List the unsupported fragments found
-2. Show which definitions ARE available
-3. Suggest how to express the intent using supported fragments (e.g., `par` → sequential arrows with a comment noting concurrency is a runtime concern)
-
-### 4 Critical Checks
-
-Validate these four categories. For detailed per-pattern rules, reference the relevant definition.
-
-1. **Arrow parity** — Count solid arrows in UML. Count `verify()` calls in test. They must be equal. Each `when().thenReturn()` must correspond to a dashed return arrow. The `assertThat(result)` must match the final return value.
-
-2. **Data flow integrity** — Each dashed return value feeds the correct next solid arrow argument (pipe pattern from the interaction definition). Implementation calls methods in the same order as `verify()` tests appear. Variable names match mock field names.
-
-3. **File mode correctness** — Discovery completed. CREATE uses Write tool, UPDATE uses Edit tool. No existing content modified, moved, or deleted. No duplicate `@Mock` fields or `@Nested` classes.
-
-4. **Pattern rules applied** — Guard clause placement correct (guard_clause definition). Leaf nodes classified as computational vs I/O (leaf_node definition). Branching has `@Nested` per branch (branching definition). Constructor injection includes all collaborators and only collaborators.
-
----
-
-# Section 2: Router
-
-The router orchestrates the DisC pipeline. It contains zero domain knowledge — it only dispatches to the definitions in Section 1.
-
-## Step 1: Validate
-
-Check that the UML is parseable and all elements are supported.
-
-- Parse the input UML diagram
-- For each element, check it matches a definition: participant, interaction, loop, branching, guard_clause, or leaf_node
-- If any element is unsupported or ambiguous → invoke the quality_gate Refusal Protocol. **STOP.**
-
-## Step 2: Classify
-
-Identify which definitions apply to this UML.
-
-- List all participants → apply the **participant** definition to classify each as orchestrator or leaf node
-- List all solid arrows → each is an **interaction**
-- Identify `loop`/`end` blocks → mark as **loop**
-- Identify `alt`/`else`/`end` blocks → mark as **branching**
-- Identify self-arrows with `<<throws>>` → mark as **guard_clause**
-- Identify participants with no outgoing arrows → mark as **leaf_node** and sub-classify (computational vs I/O)
-
-## Step 3: Apply (UML → Interfaces + Tests)
-
-For each classified element, use the matching definition to generate output.
-
-1. **Package detection** — Resolve `{basePackage}` using the **language_profile** Base Package Detection rules
-2. **Discovery** — Apply the **file_management** definition to determine CREATE or UPDATE mode for every target file
-3. **Generate interfaces** — One per collaborator, using **language_profile** naming/placement + **file_management** mode
-4. **Generate tests** — For each UML element, apply its definition's test shape. Use **language_profile** templates.
-5. **Generate decision table skeletons** — For each **leaf_node** (computational only), generate a standalone test skeleton
-6. **Run quality_gate** — Pass all 4 Critical Checks before writing any files
-
-## Step 4: Implement (Tests → Code)
-
-**IMPORTANT:** Re-read the test file. Do NOT reference the UML diagram. The test is your specification. Derive the implementation entirely from the `verify()` calls and `when().thenReturn()` chains in the test. This preserves the DisC guarantee — the two-phase wall ensures implementation structure matches what the tests demand.
-
-Read every `verify()` call and `when().thenReturn()` in the test. The implementation must:
-
-1. Call every method that appears in a `verify()`, in order
-2. Pass the exact arguments verified (follow the data flow from `when().thenReturn()` chains)
-3. Return the value that `assertThat(result).isEqualTo(...)` expects
-
-Apply **language_profile** templates + **file_management** mode.
-
-**Scope limitation:** DisC verifies the design contract — that collaborators are called in the right order with the right arguments. It does NOT verify runtime correctness (e.g., a real repository throwing, a real mapper transforming incorrectly). Runtime correctness requires integration tests. DisC and integration tests are complementary, not substitutes.
-
-## Step 5: Report
-
-### Walkthrough Example: Simple Linear Flow
-
-**UML Input:**
-```
-ProductService -> ProductMapper: toEntity(createProductRequest)
-ProductMapper --> ProductService: product
-ProductService -> ProductRepository: save(product)
-ProductRepository --> ProductService: product (saved)
-ProductService -> ProductMapper: toDTO(product)
-ProductMapper --> ProductService: productDto
-ProductService -> ProductResponseFactory: createSingleResponse(productDto)
-ProductResponseFactory --> ProductService: singleProductResponse
-```
-
-**Generated Test:**
-```java
-@MockitoSettings(strictness = Strictness.LENIENT)
-class DefaultProductServiceTest {
-
-    @Mock private ProductRepository productRepository;
-    @Mock private ProductMapper productMapper;
-    @Mock private ProductResponseFactory responseFactory;
-
-    @Mock private CreateProductRequest createProductRequest;
-    @Mock private Product product;
-    @Mock private ProductDTO productDto;
-    @Mock private SingleProductResponse singleProductResponse;
-
-    private SingleProductResponse result;
-    DefaultProductService defaultProductService;
-
-    @BeforeEach
-    void setUp() {
-        defaultProductService = new DefaultProductService(productRepository, productMapper, responseFactory);
-    }
-
-    @Nested
-    class WhenCreateProduct {
-
-        @BeforeEach
-        void setUp() {
-            when(productMapper.toEntity(any())).thenReturn(product);
-            when(productRepository.save(any())).thenReturn(product);
-            when(productMapper.toDTO(any())).thenReturn(productDto);
-            when(responseFactory.createSingleResponse(any())).thenReturn(singleProductResponse);
-            result = defaultProductService.createProduct(createProductRequest);
-        }
-
-        @Test void shouldMapToEntity() { verify(productMapper).toEntity(createProductRequest); }
-        @Test void shouldCallRepositorySave() { verify(productRepository).save(product); }
-        @Test void shouldMapToDto() { verify(productMapper).toDTO(product); }
-        @Test void shouldCreateResponse() { verify(responseFactory).createSingleResponse(productDto); }
-        @Test void shouldReturnResponse() { assertThat(result).isEqualTo(singleProductResponse); }
-    }
-}
-```
-
-**4 solid arrows = 4 verify() tests + 1 assertThat = 5 total tests.**
-
-### Output Format
-
-Structure your response as:
-
-**Step 1: Validate**
-- Confirm all UML elements are supported
-
-**Step 2: Classify**
-- List elements and their matching definitions
-
-**Step 3: Apply (Design)**
-
-For each file:
-- **CREATE mode:** Show full file path + complete file content
-- **UPDATE mode:** Show full file path + ONLY the new content to be added. Clearly label: "ADD to existing file"
-
-Generate in this order:
-1. Entity/model classes (if new types are needed)
-2. Interfaces (one per collaborator + one for the service under test)
-3. Test class
-
-**Step 4: Implement**
-
-For each file:
-- **CREATE mode:** Show full file path + complete file content
-- **UPDATE mode:** Show full file path + ONLY the new method body. Clearly label: "ADD to existing file"
-
-**Step 5: Report**
-```
-Arrows:          [N] solid arrows parsed
+Arrows:          [N] call_arrows parsed
 Orchestrators:   [N] participants with outgoing arrows
-Pure functions:  [M] leaf node participants (decision table skeletons generated)
-Tests:           [N] verify() tests + 1 assertThat() = [N+1] total
-Files:           [list of files created/updated]
+Leaf nodes:      [M] leaf nodes (decision_table skeletons: [count])
+Tests:           [N] verify_tests + [R] result_tests = [total] total
+Files:           [CREATE/UPDATE labels per file]
 ```
 
-### Human Verification
+**Human verification checklist:**
+1. Count arrows in UML. Count `verify_test`s in test. Must match.
+2. Each `verify_test` argument matches its UML arrow's argument.
+3. Each `stub` matches a `return_arrow`.
+4. Fill in `decision_table` TODO test cases with real business examples.
 
-After code is generated, the human verifies the contract held by checking:
+**Final steps:**
+1. Write files to disk per file mode
+2. Run the language profile's build command
+3. If tests fail: read error, fix, re-run
+4. Report files and test results
 
-1. **Count arrows in UML. Count `verify()` calls in test. They must match.**
-2. Read each `verify()` argument — does it match the UML arrow's argument?
-3. Read the `@BeforeEach` setup — does each `when().thenReturn()` match a dashed return arrow?
-4. For pure function skeletons — fill in the TODO test cases with real business examples.
+---
 
-This is a 30-second mechanical check, not an hours-long code review. The entire methodology exists to make this moment possible.
+## File Management Reference
 
-### Final Steps
+### Domain Type Rule
 
-After passing the quality gate:
-1. Write files to disk using the appropriate tool per the file_management definition
-2. Run `./gradlew test` to verify everything compiles and passes
-3. If tests fail, read the error output, fix the issue, and re-run
-4. Report the number of files generated/updated and tests that passed
+Any type in an interface method signature that represents a domain concept is generated as an **interface**, not a class. This enforces Dependency Inversion.
+
+**Not domain types (leave as-is):** Primitives/wrappers, standard generics, framework types, boundary carriers (`*Request`, `*Response`, `*DTO`). See the language profile for language-specific exceptions.
+
+> Domain type EXISTS as class: do not convert to interface. Warn in report.
+
+---
+
+## Output Format
+
+Structure your response with these section headers:
+
+1. **Step 1: Validate** — Confirm all UML elements supported
+2. **Step 2: Classify** — List elements and classifications
+3. **Step 3: Discover** — Base package, file paths, CREATE/UPDATE modes
+4. **Step 4: Generate** — Files with content:
+   - CREATE: full path + complete content
+   - UPDATE: full path + new content only, labeled "ADD to existing file"
+   - Order: domain types → interfaces → tests → `decision_table` skeletons
+5. **Step 5: Quality Gate** — Show four checks passing
+6. **Step 6: Implement** — Files with content (same CREATE/UPDATE labeling)
+7. **Step 7: Write** — Files written to disk
+8. **Step 8: Report** — Summary + human verification checklist
