@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-02-26
+
+### Added
+- Release script (`scripts/release.sh`) for automated version bumps, changelog updates, and tagging
+
 ## [0.1.0] - 2026-02-26
 
 ### Added
