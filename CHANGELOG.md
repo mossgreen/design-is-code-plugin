@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-02-27
+
+### Fixed
+- Token tracker hook errors (`PreToolUse:Glob hook error`, `PreToolUse:Read hook error`) caused by empty `CLAUDE_PLUGIN_ROOT` at runtime
+- Grep patterns in `token-tracker.sh` now handle both compact and spaced JSON
+
 ## [0.1.1] - 2026-02-26
 
 ### Added
