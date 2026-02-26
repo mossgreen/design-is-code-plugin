@@ -3,9 +3,9 @@
 # Handles both PreToolUse (bookmark) and Stop (report).
 
 INPUT=$(cat)
-EVENT=$(echo "$INPUT" | grep -o '"hook_event_name":"[^"]*"' | head -1 | cut -d'"' -f4)
-SESSION_ID=$(echo "$INPUT" | grep -o '"session_id":"[^"]*"' | head -1 | cut -d'"' -f4)
-TRANSCRIPT=$(echo "$INPUT" | grep -o '"transcript_path":"[^"]*"' | head -1 | cut -d'"' -f4)
+EVENT=$(echo "$INPUT" | grep -o '"hook_event_name" *: *"[^"]*"' | head -1 | cut -d'"' -f4 || true)
+SESSION_ID=$(echo "$INPUT" | grep -o '"session_id" *: *"[^"]*"' | head -1 | cut -d'"' -f4 || true)
+TRANSCRIPT=$(echo "$INPUT" | grep -o '"transcript_path" *: *"[^"]*"' | head -1 | cut -d'"' -f4 || true)
 BOOKMARK="/tmp/disc-token-bookmark-${SESSION_ID}"
 
 if [ "$EVENT" = "PreToolUse" ]; then
