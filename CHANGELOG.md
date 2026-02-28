@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-02-28
+
+### Added
+- Added "Keep the Plugin Up to Date" section explaining how to manually refresh the marketplace
+
+### Fixed
+- Token tracker hooks now work with user-scope installs: fall back to `find ~/.claude/plugins` when `CLAUDE_PLUGIN_ROOT` is unset, instead of silently doing nothing
+- Clarified install instructions to use `user` scope, preventing "Unknown skill" errors when opening Claude Code in a different project
+
 ## [0.1.2] - 2026-02-27
 
 ### Fixed

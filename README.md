@@ -82,19 +82,30 @@ Currently supports **Java** with **UML sequence diagrams** (PlantUML format). Su
 
 1. Install the plugin in Claude Code ([plugin docs](https://code.claude.com/docs/en/plugins)) in 2 commands:
    ```
-   /plugin marketplace add mossgreen/design-is-code-plugin
-   ```
-   ```
-   /plugin install design-is-code@mossgreen-design-is-code
+   claude plugin marketplace add mossgreen/design-is-code-plugin
+   claude plugin install design-is-code@mossgreen-design-is-code --scope user
    ```
 2. Put your UML sequence diagram in your project's `design/` folder
 3. Run `/design-is-code:disc <filename>` in Claude Code
 
+Verify it's working: open Claude Code in any project and run `/design-is-code:disc`.
+
+## Keep the Plugin Up to Date
+
+Third-party marketplaces have auto-update disabled by default. To manually pull the latest version:
+
+```
+/plugin marketplace update mossgreen-design-is-code
+```
+
+Claude Code will notify you to restart if a new version was found.
+
+
 ## Uninstall Design-Is-Code plugin for Claude Code
 
 ```
-/plugin uninstall design-is-code@mossgreen-design-is-code
-/plugin marketplace remove mossgreen-design-is-code
+claude plugin uninstall design-is-code@mossgreen-design-is-code --scope user
+claude plugin marketplace remove mossgreen-design-is-code
 ```
 
 Verify with `/plugin` — check the Installed tab.

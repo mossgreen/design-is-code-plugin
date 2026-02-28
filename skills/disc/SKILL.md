@@ -6,11 +6,11 @@ hooks:
   PreToolUse:
     - hooks:
         - type: command
-          command: "S=${CLAUDE_PLUGIN_ROOT:-.}/skills/disc/hooks/token-tracker.sh; [ -x \"$S\" ] && exec \"$S\" || exit 0"
+          command: "S=${CLAUDE_PLUGIN_ROOT:+${CLAUDE_PLUGIN_ROOT}/skills/disc/hooks/token-tracker.sh}; [ -x \"$S\" ] || S=$(find ${HOME}/.claude/plugins -name token-tracker.sh 2>/dev/null | head -1); [ -x \"$S\" ] && exec \"$S\" || exit 0"
   Stop:
     - hooks:
         - type: command
-          command: "S=${CLAUDE_PLUGIN_ROOT:-.}/skills/disc/hooks/token-tracker.sh; [ -x \"$S\" ] && exec \"$S\" || exit 0"
+          command: "S=${CLAUDE_PLUGIN_ROOT:+${CLAUDE_PLUGIN_ROOT}/skills/disc/hooks/token-tracker.sh}; [ -x \"$S\" ] || S=$(find ${HOME}/.claude/plugins -name token-tracker.sh 2>/dev/null | head -1); [ -x \"$S\" ] && exec \"$S\" || exit 0"
 ---
 
 You are executing the DisC (Design is Code) methodology. Transform the provided UML sequence diagram into working code: first generate tests from the UML, then derive implementation from the tests.
