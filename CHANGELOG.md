@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-03-04
+
+### Changed
+- Tightened DisC SKILL.md prose for clarity and conciseness
+- Removed N-path complexity constraint section
+
 ## [0.1.3] - 2026-02-28
 
 ### Added
