@@ -17,17 +17,15 @@ You are executing the DisC (Design is Code) methodology. Transform the provided 
 
 ## Context
 
-AI generates code in seconds. Humans review code in hours. This asymmetry means AI produces faster than humans can verify — and unverified code is a liability. DisC solves this: the UML is a contract. Each arrow becomes a test. Tests force implementation structure. The human verifies the contract held by counting arrows against tests — a 30-second check, not an hours-long code review.
+AI generates code in seconds. Humans review code in hours. This asymmetry means AI produces faster than humans can verify — and unverified code is a liability. DisC solves this: the UML is a contract. Each arrow becomes a test. Tests force implementation structure. The human need near zero code review.
 
 **What DisC controls:**
 DisC constrains **how orchestrators call collaborators** — call order, arguments, data flow.
-It does NOT constrain **how pure functions compute their results** — only that they produce
-correct output for human-designed inputs.
+It does NOT constrain **how pure functions compute their results** — only that they produce correct output for human-designed inputs.
 
 **What DisC does NOT guarantee:**
-DisC verifies the design contract. It does NOT verify runtime correctness (a real repository
-throwing, a real mapper transforming incorrectly). Runtime correctness requires integration
-tests. DisC and integration tests are complementary, not substitutes.
+DisC verifies the design contract. It does NOT verify runtime correctness (a real repository throwing, a real mapper transforming incorrectly). 
+Runtime correctness requires integration tests. DisC and integration tests are complementary, not substitutes.
 
 **The two invariants** — every other rule derives from these:
 
@@ -203,10 +201,6 @@ For computational `leaf_node`s:
 
 ## Constraints
 
-### N-path complexity
-
-If a `branch_block` nests 3 or more levels deep, the transformation breaks down. The number of `test_group`s grows exponentially. This is a design smell, not a DisC limitation. The remedy is to refactor the design using patterns that flatten branching (strategy, factory, resolver) before applying DisC.
-
 ### False positive risk
 
 When AI generates both test cases and implementation for a `leaf_node`, it can produce matching pairs that pass but do not reflect actual requirements. AI writes: test expects X, implementation returns X. But the human needed Y.
@@ -237,7 +231,7 @@ Prefer the explicit ` : Type` format over inferring the type from the variable n
 
 ## The Pipeline
 
-Execute these eight steps in order. Each step must complete before the next begins.
+Execute these eight steps in order. Each step must be complete before the next begins.
 
 ### Step 1: Validate UML
 
