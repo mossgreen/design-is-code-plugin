@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Colon syntax for participant naming: `PriorityOrderService: OrderService` lets users specify explicit implementation names
+- `[InterfaceName]` and `[ImplementationName]` as standard placeholders across templates and file path patterns
+
+### Changed
+- Participant definition in SKILL.md now describes bare form (abstraction) and colon form (implementation: abstraction)
+- Naming Conventions in java_spring.md: implementation name defaults to `Default` + interface name, overridable via colon syntax
+- Test Class Template, Implementation Template, Decision Table Skeleton, and File Path Patterns all use `[ImplementationName]`/`[InterfaceName]` instead of hardcoded `Default[Name]`
+
 ## [0.1.4] - 2026-03-04
 
 ### Changed

@@ -19,15 +19,21 @@ All Java/Spring-specific conventions, templates, and examples for the DisC metho
 
 ## Naming Conventions
 
-| Element | Convention | Example |
-|---|---|---|
-| Interface | PascalCase, from participant name | `OrderService` |
-| Implementation class | `Default` + interface name | `DefaultOrderService` |
-| Test class | Implementation name + `Test` | `DefaultOrderServiceTest` |
-| Test method | `should` + verb phrase describing interaction | `shouldSaveOrder` |
-| Mock field (collaborator) | camelCase of interface name | `orderMapper` |
+By default, the participant name is the interface name. 
+If the participant uses a colon (e.g., `PriorityOrderService: OrderService`), the left side is the implementation name and the right side is the interface name. 
+If no implementation name is defined, use `Default` + interface name.
+
+| Element | Convention | Example                                   |
+|---|---|-------------------------------------------|
+| Interface | PascalCase, from participant name (or right of `:`) | `OrderService` |
+| Implementation class | Left of `:` if defined, otherwise `Default` + interface name | `PriorityOrderService` or `DefaultOrderService`|
+| Test class | Implementation name + `Test` | `PriorityOrderServiceTest`                        |
+| Test method | `should` + verb phrase describing interaction | `shouldSaveOrder`                         |
+| Mock field (collaborator) | camelCase of interface name | `orderMapper`                             |
 | Mock field (data) | Variable name from return label. Type from explicit `: Type` or PascalCase inference | `savedOrder : Order` → field: `Order savedOrder` |
 
+The interface name will be referenced as "InterfaceName"
+the implementation name will be referenced as "ImplementationName"
 ---
 
 ## Package Placement
@@ -52,9 +58,9 @@ If a suffix doesn't match any rule, use `{basePackage}.service` as the default.
 
 | Element | Path |
 |---|---|
-| Interface | `src/main/java/{basePackagePath}/[package]/[Name].java` |
-| Implementation | `src/main/java/{basePackagePath}/[package]/Default[Name].java` |
-| Test | `src/test/java/{basePackagePath}/[package]/Default[Name]Test.java` |
+| Interface | `src/main/java/{basePackagePath}/[package]/[InterfaceName].java` |
+| Implementation | `src/main/java/{basePackagePath}/[package]/[ImplementationName].java` |
+| Test | `src/test/java/{basePackagePath}/[package]/[ImplementationName]Test.java` |
 | Domain type | `src/main/java/{basePackagePath}/entity/[Type].java` |
 
 ---
@@ -92,18 +98,18 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @MockitoSettings(strictness = Strictness.LENIENT)
-class Default[ServiceName]Test {
+class [ImplementationName]Test {
 
     @Mock private [Collaborator1] [collaborator1];
     @Mock private [Collaborator2] [collaborator2];
     @Mock private [InputType] [input];
     @Mock private [ReturnType1] [returnValue1];
     private [FinalReturnType] result;
-    Default[ServiceName] default[ServiceName];
+    [InterfaceName] [implementationName];
 
     @BeforeEach
     void setUp() {
-        default[ServiceName] = new Default[ServiceName]([collaborator1], [collaborator2]);
+        [implementationName] = new [ImplementationName]([collaborator1], [collaborator2]);
     }
 
     @Nested
@@ -111,7 +117,7 @@ class Default[ServiceName]Test {
         @BeforeEach
         void setUp() {
             when([collaborator].method(any())).thenReturn([returnValue]);
-            result = default[ServiceName].[methodName]([input]);
+            result = [implementationName].[methodName]([input]);
         }
 
         @Test void should[DescribeInteraction]() { verify([collaborator]).[method]([expectedArg]); }
@@ -138,11 +144,11 @@ package {basePackage}.service;
 import org.springframework.stereotype.Service;
 
 @Service
-public class Default[ServiceName] implements [ServiceName] {
+public class [ImplementationName] implements [InterfaceName] {
     private final [Collaborator1] [collaborator1];
     private final [Collaborator2] [collaborator2];
 
-    public Default[ServiceName]([Collaborator1] [collaborator1], [Collaborator2] [collaborator2]) {
+    public [ImplementationName]([Collaborator1] [collaborator1], [Collaborator2] [collaborator2]) {
         this.[collaborator1] = [collaborator1];
         this.[collaborator2] = [collaborator2];
     }
@@ -189,9 +195,9 @@ public class Default[ServiceName] implements [ServiceName] {
 ## Decision Table Skeleton (computational `leaf_node`)
 
 ```java
-class Default[LeafNodeName]Test {
+class [ImplementationName]Test {
 
-    private [LeafNodeName] [instance] = new Default[LeafNodeName]();
+    private [InterfaceName] [instance] = new [ImplementationName]();
 
     // TODO: Human must fill in the decision table.
     // DisC CANNOT dictate the implementation of pure functions.

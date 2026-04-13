@@ -51,7 +51,7 @@ Every later reference uses the exact snake_case name defined here.
 
 - **`return_arrow`** — An arrow from callee back to caller representing a returned value. Labeled with a value: `B --> A: value` or `B --> A: value : Type`. May appear as dashed (`-->`) or plain arrow. Identified by direction (back to the original caller) and label format (a value name, no parentheses).
 
-- **`participant`** — A named box in the diagram.
+- **`participant`** — A named box in the diagram. By default, the participant name stands for the abstraction. Only when the name is separated by colon, the left is the implementation name, the right is the abstraction's name.
 
 - **`loop_block`** — A `loop` / `end` fragment wrapping one or more arrows.
 
