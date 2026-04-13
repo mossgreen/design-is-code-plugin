@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-04-13
+
 ### Added
 - Colon syntax for participant naming: `PriorityOrderService: OrderService` lets users specify explicit implementation names
 - `[InterfaceName]` and `[ImplementationName]` as standard placeholders across templates and file path patterns
