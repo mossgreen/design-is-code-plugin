@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-04-14
+
 ### Removed
 - Token tracker hooks (PreToolUse and Stop) from SKILL.md frontmatter
 - Token usage reporting from Step 8 report
