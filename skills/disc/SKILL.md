@@ -2,15 +2,6 @@
 name: disc
 description: "Transform UML sequence diagrams into working code using the DisC methodology"
 disable-model-invocation: true
-hooks:
-  PreToolUse:
-    - hooks:
-        - type: command
-          command: "S=${CLAUDE_PLUGIN_ROOT:+${CLAUDE_PLUGIN_ROOT}/skills/disc/hooks/token-tracker.sh}; [ -x \"$S\" ] || S=$(find ${HOME}/.claude/plugins -name token-tracker.sh 2>/dev/null | head -1); [ -x \"$S\" ] && exec \"$S\" || exit 0"
-  Stop:
-    - hooks:
-        - type: command
-          command: "S=${CLAUDE_PLUGIN_ROOT:+${CLAUDE_PLUGIN_ROOT}/skills/disc/hooks/token-tracker.sh}; [ -x \"$S\" ] || S=$(find ${HOME}/.claude/plugins -name token-tracker.sh 2>/dev/null | head -1); [ -x \"$S\" ] && exec \"$S\" || exit 0"
 ---
 
 You are executing the DisC (Design is Code) methodology. Transform the provided UML sequence diagram into working code: first generate tests from the UML, then derive implementation from the tests.
@@ -380,10 +371,6 @@ Files:           [CREATE/UPDATE labels per file]
 2. Each `verify_test` argument matches its UML arrow's argument.
 3. Each `stub` matches a `return_arrow`.
 4. Fill in `decision_table` TODO test cases with real business examples.
-
-**Token Usage:** Reported automatically by the Stop hook. When you receive the
-token usage feedback, include it in this summary. If no report appears, note:
-`Token usage: unavailable (hook did not fire)`
 
 **Final steps:**
 1. Write files to disk per file mode
