@@ -49,14 +49,21 @@ The key mechanism:
   Working Code (Reviewed designs don't need code review)
 ```
 
+## Participants
+
+Every participant in a design is either an **orchestrator** or a **leaf**.
+
+An orchestrator has dependencies and coordinates them. Orchestrators are verified by mockist tests — every call becomes a test, every argument is pinned, every order is fixed. AI generation risk is low because the tests fully constrain the structure.
+
+A leaf has no outgoing calls. Because leaves cannot be verified by interaction tests, DisC classifies each one by what kind of work it does, and tests it accordingly:
+
+- **Pure function** — output depends only on inputs. Tested by decision table: humans design the test cases (input → expected output), AI implements only. AI must not invent both cases and implementation — that creates false positives where tests pass but logic is wrong. When a decision table is authored ahead of time as `design/<Participant>.decision.md`, DisC consumes it directly and generates filled tests; otherwise DisC emits a skeleton for humans to fill in.
+- **Side effect** — touches external systems (DB, network, clock, queue). Mocked in consumer tests; correctness verified via integration tests, not DisC.
+- **Factory** — name ends in `Factory`. Assumed to be pass-through packaging into a constructor. No standalone test; correctness is transitive through the consumer.
+
 ## Scope and Limitations
 
 DisC constrains interaction structure — how components collaborate. It does not constrain non-functional properties: performance, readability, or error handling style.
-
-Two kinds of components behave differently:
-
-- Collaborative components have dependencies that can be verified with mocks. AI generation risk is low — the tests fully constrain the structure.
-- Pure functions (Mappers, Factories, algorithms) have no dependencies and can't be verified by interaction tests. For these, humans must design the test cases: input values, expected outputs, and edge cases. AI should not invent both the test cases and the implementation — that creates false positives where tests pass but logic is wrong.
 
 Algorithmic code — ML pipelines, trading algorithms, game engines — falls outside the methodology entirely.
 
@@ -77,6 +84,8 @@ Currently supports **Java** with **UML sequence diagrams** (PlantUML format). Su
 1. Clone this repo: https://github.com/mossgreen/design-is-code-demo, it's a Java Spring Boot project with simple UML sequence diagram examples.
 2. Run `/disc 01_hello-world.puml` in Claude Code session
 3. it requires Java 17.
+
+The `design/` folder may contain both `.puml` UML files and `.decision.md` decision-table files. DisC picks up both in one invocation: UML defines orchestration, decision tables define pure-function leaves.
 
 ## Install Design-Is-Code plugin for Claude Code
 

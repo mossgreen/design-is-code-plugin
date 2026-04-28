@@ -65,9 +65,11 @@ If a suffix doesn't match any rule, use `{basePackage}.service` as the default.
 
 ---
 
-## Domain Type Exceptions
+## Domain Type Rule
 
-These are NOT domain types — leave as-is, do not generate interfaces for them:
+Any type in an interface method signature that represents a domain concept is generated as an **interface**, not a class. This enforces Dependency Inversion.
+
+**Exceptions** — these are NOT domain types; leave as-is, do not generate interfaces for them:
 
 | Category | Examples |
 |---|---|
@@ -77,6 +79,8 @@ These are NOT domain types — leave as-is, do not generate interfaces for them:
 | Boundary carriers | `*Request`, `*Response`, `*DTO` |
 
 Primitives and final classes like `UUID`, `Integer`, `String` cannot be mocked. Use real values: `UUID.randomUUID()`, `(int)(Math.random() * 1000)`.
+
+**Note:** if a domain type EXISTS as a class, do not convert to interface. Warn in report.
 
 ---
 
@@ -192,7 +196,11 @@ public class [ImplementationName] implements [InterfaceName] {
 
 ---
 
-## Decision Table Skeleton (computational `leaf_node`)
+## Decision Table (pure function `leaf_node`)
+
+A pure-function leaf is tested either from a **skeleton** (no `decision_table_file` attached) or from **filled rows** (a `<Participant>.decision.md` exists in `design/` and pairs with this leaf).
+
+### Skeleton mode (no `decision_table_file`)
 
 ```java
 class [ImplementationName]Test {
@@ -214,6 +222,102 @@ class [ImplementationName]Test {
     }
 }
 ```
+
+### Filled mode (`decision_table_file` attached)
+
+Input file: `design/<Participant>.decision.md` with YAML frontmatter + markdown table.
+
+```markdown
+---
+target: ProductMapper.toEntity
+input:
+  request.name: String
+  request.price: BigDecimal
+output: Product
+---
+
+| request.name | request.price | expected.name | expected.price |
+|---|---|---|---|
+| "Widget"     | 10.00         | "Widget"      | 10.00          |
+| "  Item  "   | 5.00          | "Item"        | 5.00           |
+| ""           | 10.00         | throws: IllegalArgumentException |  |
+```
+
+**Frontmatter fields:**
+- `target: <Class>.<method>` — required. Names the participant and call_arrow in the UML this table specifies.
+- `input:` — required. Map of column name → type for every input column.
+- `output:` — required. Return type of the target method (or the object type when output columns are `expected.<field>`).
+- `config:` — optional. Pins behaviour-changing choices the rows do not demonstrate. Keys are enumerated below; unknown keys cause Step 1 refusal.
+
+**Recognized `config:` keys:**
+
+| Key | Allowed values | Required when |
+|---|---|---|
+| `rounding` | `HALF_UP`, `HALF_EVEN`, `HALF_DOWN`, `CEILING`, `FLOOR` | Output type involves `BigDecimal` or floating-point arithmetic and rows do not uniquely demonstrate the mode. **`required_decision`.** |
+| `scale` | non-negative integer | `rounding` is set or rows imply rounding occurs. **`required_decision` when rounding occurs**; otherwise the default is to preserve the input's scale. |
+| `nullHandling` | `throw`, `passThrough`, `defaultValue` | Any input column is a nullable reference type and rows do not demonstrate the choice. **`required_decision`.** |
+| `exceptionType` | fully-qualified class name (e.g. `java.lang.IllegalArgumentException`) | A row's output cell is `throws:` without a specific type, or validation behaviour is implied but no exception row exists. **`required_decision`.** |
+| `locale` | BCP-47 tag (e.g. `en-US`) or `ROOT` | Optional. Default: `ROOT`. Override only when case-folding, collation, or formatting must follow a specific locale. |
+
+Unknown `config:` keys cause Step 1 refusal — DisC will not silently ignore them.
+
+**Recognized `optional_decision` entries:**
+
+| Axis | Default value | Override mechanism |
+|---|---|---|
+| `locale` | `Locale.ROOT` | `config: locale:` |
+| Ordering of unordered output | Preserve input order | None — inherent to language defaults |
+| `scale` (without rounding) | Preserve input scale | `config: scale:` |
+| Whitespace | Preserve unless a row demonstrates a transformation | None — change a row instead |
+
+`config:` uses the YAML literal (e.g., `ROOT`); the implementation uses the Java constant (`Locale.ROOT`). Defaults are applied silently when rows and `config:` are silent; they are not reported per run.
+
+**Row conventions:**
+- String literals quoted: `"Widget"`. Whitespace inside the quotes is meaningful.
+- Numeric literals unquoted: `10.00`, `-50`.
+- Exception rows: output cell is `throws: <ExceptionType>` or `throws: <ExceptionType>: "<message>"`. Other `expected.*` cells are ignored.
+
+**Generated test file:**
+
+```java
+@MockitoSettings(strictness = Strictness.LENIENT)
+class DefaultProductMapperTest {
+
+    private ProductMapper productMapper = new DefaultProductMapper();
+
+    @Test
+    void shouldMapWidget() {
+        CreateProductRequest request = new CreateProductRequest("Widget", new BigDecimal("10.00"));
+        Product result = productMapper.toEntity(request);
+        assertThat(result.getName()).isEqualTo("Widget");
+        assertThat(result.getPrice()).isEqualByComparingTo(new BigDecimal("10.00"));
+    }
+
+    @Test
+    void shouldTrimItem() {
+        CreateProductRequest request = new CreateProductRequest("  Item  ", new BigDecimal("5.00"));
+        Product result = productMapper.toEntity(request);
+        assertThat(result.getName()).isEqualTo("Item");
+        assertThat(result.getPrice()).isEqualByComparingTo(new BigDecimal("5.00"));
+    }
+
+    @Test
+    void shouldRejectEmptyName() {
+        CreateProductRequest request = new CreateProductRequest("", new BigDecimal("10.00"));
+        assertThatThrownBy(() -> productMapper.toEntity(request))
+            .isInstanceOf(IllegalArgumentException.class);
+    }
+}
+```
+
+**Filled-mode rules:**
+- One `@Test` per row. Test method names are humanised from row content.
+- No `@Mock` on declared input types — construct real instances using declared types from `input:`.
+- Primitives and final classes (`UUID`, `Integer`, `String`, `BigDecimal`) always use real values.
+- Exception rows use `assertThatThrownBy`. When the row specifies a message, chain `.hasMessage(...)`.
+- No TODO markers. Every row is concrete.
+- Every `required_decision` (see the `config:` keys table above) MUST be either demonstrated by rows or pinned by `config:`. Otherwise Step 1 refuses.
+- `optional_decision` behaviour is applied silently when rows and `config:` are silent. The full list and defaults are in the **Recognized `optional_decision` entries** table above.
 
 ---
 
@@ -237,9 +341,9 @@ ProductResponseFactory --> ProductService: singleProductResponse
 
 **Step 2:**
 - `ProductService` → `component_under_test`
-- `ProductMapper` → `leaf_node` (computational — Mapper)
-- `ProductRepository` → `leaf_node` (I/O boundary — Repository)
-- `ProductResponseFactory` → `leaf_node` (computational — Factory)
+- `ProductMapper` → `leaf_node` (pure function — output depends only on inputs)
+- `ProductRepository` → `leaf_node` (side effect — touches the database)
+- `ProductResponseFactory` → `leaf_node` (factory — name ends in `Factory`; no standalone test)
 - 4 `interaction`s, all with `return_arrow`s
 - `data_pipe`s: `product` → `save` → `savedProduct` → `toDTO` → `productDto` → `createSingleResponse`
 
@@ -290,11 +394,21 @@ class DefaultProductServiceTest {
 }
 ```
 
-**Step 5:** Arrow parity: 4 = 4. Data flow: pipes connect. File modes: all CREATE. Patterns: leaf nodes classified.
+In addition, `ProductMapper` is a `pure function` leaf without a `decision_table_file` attached, so a `decision_table` skeleton is generated for it (see the Skeleton-mode template in the Decision Table section above). The human is expected to fill in the test cases.
+
+**Step 5:** Arrow parity: 4 = 4. Data flow: pipes connect. File modes: all CREATE. Patterns: leaf nodes classified; `ProductMapper` skeleton marked TODO for human review.
 
 **Step 6:** Read tests → derive implementation. Each `verify()` → one method call. Pipes flow through.
 
-**Step 8:** 4 arrows, 0 orchestrator collaborators, 2 computational leaf nodes, 5 tests, all files CREATE.
+**Step 8 report:**
+```
+Arrows:          4 call_arrows parsed
+Orchestrators:   1 (ProductService)
+Leaf nodes:      3 total (1 pure function, 1 side effect, 1 factory)
+Decision tables: 0 filled from decision_table_file, 1 skeleton for humans to fill
+Tests:           4 verify_tests + 1 result_test = 5 total
+Files:           CREATE: ProductService, ProductServiceTest, DefaultProductService, DefaultProductServiceTest, ProductMapperTest (skeleton), Product, ProductDTO, SingleProductResponse
+```
 
 ---
 
@@ -551,3 +665,124 @@ when(productService.getProductByIds(any())).thenReturn(List.of(product));
 - Primitives and final classes (`UUID`, `Integer`, `String`) use real values, not mocks
 - Each `call_arrow` inside the `loop_block` still produces one `verify_test`
 - In implementation, the `loop_block` becomes iteration (`.forEach()` or `.stream()`)
+
+---
+
+## Example: UML + Decision Table (Pure function leaf filled from `design/`)
+
+Demonstrates the paired mode: a UML defines orchestration; a `decision_table_file` defines the `pure function` leaf's behaviour. DisC generates filled tests (not a skeleton) and derives implementation from the rows.
+
+**UML Input** (`design/CreateProduct.puml`):
+```
+ProductService -> ProductMapper: toEntity(createProductRequest)
+ProductMapper --> ProductService: product
+ProductService -> ProductRepository: save(product)
+ProductRepository --> ProductService: savedProduct : Product
+```
+
+**Decision Table Input** (`design/ProductMapper.decision.md`):
+```markdown
+---
+target: ProductMapper.toEntity
+input:
+  request.name: String
+  request.price: BigDecimal
+output: Product
+config:
+  nullHandling: throw
+---
+
+| request.name | request.price | expected.name | expected.price |
+|---|---|---|---|
+| "Widget"     | 10.00         | "Widget"      | 10.00          |
+| "  Item  "   | 5.00          | "Item"        | 5.00           |
+| ""           | 10.00         | throws: IllegalArgumentException |  |
+```
+
+**Step 1:** Validate both inputs. UML has 2 `call_arrow`s. Decision table has well-formed frontmatter, 3 rows.
+
+**Step 2:** Classify.
+- `ProductService` → `component_under_test`
+- `ProductMapper` → `leaf_node` (pure function)
+- `ProductRepository` → `leaf_node` (side effect)
+- Pair `ProductMapper.decision.md` with `ProductMapper.toEntity` → mark the leaf **filled**.
+
+**Step 3:** Detect Java/Spring profile. Derive paths. Glob. Both NEW → CREATE.
+
+**Step 4:** Generate.
+
+Orchestration test for `ProductService` — standard mockist style from UML (one `verify_test` per `call_arrow`).
+
+Filled leaf test for `ProductMapper`:
+
+```java
+class DefaultProductMapperTest {
+
+    private ProductMapper productMapper = new DefaultProductMapper();
+
+    @Test
+    void shouldMapWidget() {
+        CreateProductRequest request = new CreateProductRequest("Widget", new BigDecimal("10.00"));
+        Product result = productMapper.toEntity(request);
+        assertThat(result.getName()).isEqualTo("Widget");
+        assertThat(result.getPrice()).isEqualByComparingTo(new BigDecimal("10.00"));
+    }
+
+    @Test
+    void shouldTrimItem() {
+        CreateProductRequest request = new CreateProductRequest("  Item  ", new BigDecimal("5.00"));
+        Product result = productMapper.toEntity(request);
+        assertThat(result.getName()).isEqualTo("Item");
+        assertThat(result.getPrice()).isEqualByComparingTo(new BigDecimal("5.00"));
+    }
+
+    @Test
+    void shouldRejectEmptyName() {
+        CreateProductRequest request = new CreateProductRequest("", new BigDecimal("10.00"));
+        assertThatThrownBy(() -> productMapper.toEntity(request))
+            .isInstanceOf(IllegalArgumentException.class);
+    }
+}
+```
+
+**Step 5:** Quality Gate. `required_decision` check: `nullHandling` is pinned by `config:` to `throw`; `exceptionType` is named in the exception row (`IllegalArgumentException`); `rounding` not relevant (no decimal arithmetic); `scale` not relevant. All `required_decision` entries pinned or irrelevant. Pass.
+
+**Step 6:** Implement. Reading the filled tests and the `config:` block:
+- `config: nullHandling: throw` requires a null-check before trimming.
+- Row 1 requires field copy.
+- Row 2 requires `.trim()` on the name.
+- Row 3 requires rejection of empty name after trimming.
+
+No `required_decision` was unspecified; behaviour is fully determined by rows + `config:`.
+
+```java
+@Component
+public class DefaultProductMapper implements ProductMapper {
+
+    @Override
+    public Product toEntity(CreateProductRequest request) {
+        if (request.getName() == null) {
+            throw new IllegalArgumentException("Product name must not be null");
+        }
+        String name = request.getName().trim();
+        if (name.isEmpty()) {
+            throw new IllegalArgumentException("Product name must not be empty");
+        }
+        Product product = new Product();
+        product.setName(name);
+        product.setPrice(request.getPrice());
+        return product;
+    }
+}
+```
+
+**Step 8 report:**
+```
+Arrows:          2 call_arrows parsed
+Orchestrators:   1 (ProductService)
+Leaf nodes:      2 total (1 pure function, 1 side effect, 0 factory)
+Decision tables: 1 filled from decision_table_file, 0 skeletons
+Tests:           2 verify_tests + 1 result_test + 3 filled leaf tests = 6 total
+```
+
+3 `call_arrow`s worth + 3 filled rows = 6 tests total across both files.
