@@ -53,7 +53,15 @@ What the human authors. The first artifacts in the chain.
 
 #### Decision-table elements
 
-- **`decision_table_file`** — A `design/<Participant>.decision.md` file with YAML frontmatter (`target`, `input`, `output`, optional `config`) and a markdown table of rows. Specifies the input/output behaviour of a `pure function` leaf. Frontmatter and `config:` keys are documented in the language profile.
+- **`decision_table_file`** — A `design/<Participant>.decision.md` file with YAML frontmatter (`target`, `input`, `output`, a `target_placement` declaration, optional `config`) and a markdown table of rows. Specifies the input/output behaviour of a `pure function` leaf. Frontmatter and `config:` keys are documented in the `language_profile`.
+
+#### Placement
+
+- **`target_placement`** — A declaration on each design file (both `.puml` and `decision_table_file`) stating where its generated code should live. Every design file carries one; the `language_profile` defines the form. This is a `required_decision`.
+
+#### Profile
+
+- **`language_profile`** — A static reference document at `skills/disc/<language>.md` that owns every language-specific rule the pipeline depends on. SKILL.md is language-neutral; the `language_profile` defines the form of `target_placement`, the recognised `config:` keys, the test/implementation/decision-table templates, file path patterns, naming conventions, UPDATE-mode rules, the build command, and the documented defaults for every `optional_decision`. Step 3a selects which `language_profile` to load based on project signals.
 
 ### Subject vs collaborator
 
@@ -235,7 +243,7 @@ A `pure function` leaf has decisions about behaviour that the rows may or may no
 - A **`required_decision`** is one DisC will not silently default. If the rows do not demonstrate it AND `config:` does not pin it, Step 1 refuses.
 - An **`optional_decision`** is one where DisC applies a documented default silently when the rows are silent.
 
-The lists of which specific decisions are `required_decision` vs `optional_decision` — and the default values for each `optional_decision` — are language-specific and enumerated in the language profile. Defaults are documented once in the profile; they are not reported per run. Any default can be overridden via `config:`.
+The lists of which specific decisions are `required_decision` vs `optional_decision` — and the default values for each `optional_decision` — are language-specific and enumerated in the `language_profile`. Defaults are documented once in the `language_profile`; they are not reported per run. Any default can be overridden via `config:`.
 
 ## Input
 
@@ -257,12 +265,13 @@ The input set contains at least one `.puml` (UML sequence diagram) and may also 
 
 `participant` · `call_arrow` · `return_arrow` · `loop_block` · `branch_block` · `throw_arrow`
 
-Use the disambiguation rules ("Distinguishing `call_arrow` from `return_arrow`") when arrow styles are identical.
+Use the disambiguation rules ("Distinguishing `call_arrow` from `return_arrow`") when arrow styles are identical. Confirm `target_placement` is declared per the `language_profile`'s form.
 
 **For each `decision_table_file`:** parse the YAML frontmatter and the markdown table. Confirm:
 - `target:` is present and well-formed (`Class.method`).
 - `input:` is present and declares a type for every input column used in the table.
 - `output:` is present and declares the method's return type.
+- `target_placement` is declared per the `language_profile`'s form.
 - Every column header in the markdown table maps to either a declared `input.*` key or an `expected.*` output field.
 - Row cell values are coercible to their declared types (string literals quoted, numerics unquoted).
 - Exception rows are well-formed: output cell is `throws: <ExceptionType>` (optionally `: "<message>"`).
@@ -281,8 +290,8 @@ Refuse when:
 - Participant names don't follow naming conventions
 - A `decision_table_file` has missing or malformed frontmatter, undeclared column types, or zero rows
 - A `decision_table_file`'s `target:` does not resolve to a `pure function` leaf in any UML in the input set (see Step 2 pairing)
-- A `decision_table_file` leaves a `required_decision` unspecified AND `config:` does not pin it. The refusal message names the decision and instructs the human to either (a) add a row that demonstrates the choice, or (b) add the corresponding `config:` key (see the language profile for the recognized key for each decision).
-- A `decision_table_file`'s `config:` contains a key not enumerated in the language profile. DisC does not silently ignore unknown keys.
+- A `decision_table_file` leaves a `required_decision` unspecified AND `config:` does not pin it. The refusal message names the decision and instructs the human to either (a) add a row that demonstrates the choice, or (b) add the corresponding `config:` key (see the `language_profile` for the recognized key for each decision).
+- A `decision_table_file`'s `config:` contains a key not enumerated in the `language_profile`. DisC does not silently ignore unknown keys.
 
 ### Step 2: Classify
 
@@ -308,7 +317,7 @@ Identify which concepts apply:
 
 ### Step 3: Discover Context
 
-**3a. Detect language/framework** — Determine which language profile to load:
+**3a. Detect language/framework** — Determine which `language_profile` to load:
 
 1. If the user specifies a language/framework, use that.
 2. Otherwise, detect from project files:
@@ -319,11 +328,11 @@ Identify which concepts apply:
 
 3. If no signal matches or multiple match, ask the user.
 
-Load the matched language profile. All subsequent steps use its conventions.
+Load the matched `language_profile`. All subsequent steps use its conventions.
 
-**3b. Detect base package** — Follow the language profile's base package detection rules.
+**3b. Read `target_placement` per design file** — For each design file, read its declared placement using the `language_profile`'s form. Placement is per-file and authored by the human.
 
-**3c. Derive all target file paths** — Use the language profile's naming conventions, package placement rules, and file path patterns to derive paths from participant names and domain types in `return_arrow` labels.
+**3c. Derive all target file paths** — Use the `language_profile`'s naming conventions, package placement rules, and file path patterns. Each file's `target_placement` anchors the paths derived from its participants and domain types; suffix-based sub-packaging (per the `language_profile`) applies relative to that placement.
 
 **3d. Check file existence** — Glob all target paths.
 
@@ -348,7 +357,7 @@ For each classified element, apply its transformation rule from the Transformati
 | `leaf_node` (pure function), no file attached | "leaf_node" | `decision_table` skeleton |
 | `leaf_node` (pure function), `decision_table_file` attached | "leaf_node" | Filled tests, one per row |
 
-Use the language profile's test class template and naming conventions.
+Use the `language_profile`'s test class template and naming conventions.
 
 **Generation order:** domain types → interfaces → tests → `decision_table` skeletons
 
@@ -391,20 +400,20 @@ Derive implementation entirely from the tests:
 3. Return statement produces the value `result_test` expects
 4. Apply file mode from Step 3
 
-Use the language profile's implementation template and conventions.
+Use the `language_profile`'s implementation template and conventions.
 
 This enforces Invariant 2: implementation matches what tests demand, not what UML shows.
 
 **For `pure function` leaves with a `decision_table_file` attached:**
 
-The implementation is a deterministic function of three inputs: the rows, the `config:` block, and the documented `optional_decision` values from the language profile.
+The implementation is a deterministic function of three inputs: the rows, the `config:` block, and the documented `optional_decision` values from the `language_profile`.
 
 - Read the rows. They constrain output for every input combination they list.
 - Read `config:`. It pins the value for any decision the rows do not demonstrate.
-- For any `optional_decision` the rows and `config:` are silent on, apply the language profile's documented default.
+- For any `optional_decision` the rows and `config:` are silent on, apply the `language_profile`'s documented default.
 - Do NOT make judgment calls on a `required_decision`. If one is unspecified at this point, Step 1 failed to refuse — stop and re-check Step 1, do not paper over it here.
 
-Write the implementation using these values. There is no per-run audit log; the rules are fixed by the methodology and the language profile.
+Write the implementation using these values. There is no per-run audit log; the rules are fixed by the methodology and the `language_profile`.
 
 ### Step 7: Write Files
 
@@ -415,7 +424,7 @@ Write the implementation using these values. There is no per-run audit log; the 
 
 **Critical rule:** Existing content is sacred.
 
-Use the language profile's UPDATE mode rules per file type.
+Use the `language_profile`'s UPDATE mode rules per file type.
 
 ### Step 8: Report
 
@@ -434,9 +443,10 @@ Files:           [CREATE/UPDATE labels per file]
 2. Each `verify_test` argument matches its UML arrow's argument.
 3. Each `stub` matches a `return_arrow`.
 4. For skeleton decision tables: fill in TODO test cases with real business examples.
+5. Each generated file's package matches the `target_placement` declared on its source design file.
 
 **Final steps:**
 1. Write files to disk per file mode
-2. Run the language profile's build command
+2. Run the `language_profile`'s build command
 3. If tests fail: read error, fix, re-run
 4. Report files and test results

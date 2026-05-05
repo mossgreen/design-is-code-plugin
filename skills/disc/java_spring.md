@@ -1,19 +1,47 @@
 # Java / Spring Boot Language Profile
 
-All Java/Spring-specific conventions, templates, and examples for the DisC methodology. Referenced by SKILL.md as the "language profile."
+The `language_profile` for Java/Spring. Owns all Java/Spring-specific conventions, templates, and examples for the DisC methodology.
 
 ---
 
-## Base Package Detection
+## Target Placement Declaration
 
-`{basePackage}` and `{basePackagePath}` appear throughout this profile. Resolve them BEFORE generating any code:
+In Java/Spring, a design file's `target_placement` is a fully-qualified package. Each design file declares it directly.
 
-1. Search for the class annotated with `@SpringBootApplication` — its package IS the base package
-2. If not found, glob for `src/main/java/**/*.java`, read package statements, and use the common prefix
-3. If no Java files exist, check `build.gradle` for `group` or `pom.xml` for `<groupId>`
-4. If still unresolvable, ask the user
+### In `.puml` files
 
-`{basePackagePath}` is `{basePackage}` with `.` replaced by `/` (e.g., `com.acme.orders` → `com/acme/orders`).
+A header comment on the line immediately after `@startuml`:
+
+```plantuml
+@startuml
+' @package com.demo.sale
+participant SaleService
+...
+@enduml
+```
+
+The package is the placement for every artifact derived from this diagram.
+
+### In `.decision.md` files
+
+A `package:` field in the YAML frontmatter:
+
+```yaml
+---
+target: BulkDiscountCalculator.calculate
+package: com.demo.sale
+input:
+  quantity: Integer
+  lineSubtotal: BigDecimal
+output: BigDecimal
+---
+```
+
+The package is the placement for the leaf's interface, implementation, and test.
+
+### Resolution
+
+`{basePackage}` resolves per-file to the file's declared package. `{basePackagePath}` is `{basePackage}` with `.` replaced by `/` (e.g., `com.demo.sale` → `com/demo/sale`).
 
 ---
 
@@ -327,6 +355,8 @@ Full pipeline example for a simple linear sequence diagram.
 
 **UML Input:**
 ```
+@startuml
+' @package com.example.product
 ProductService -> ProductMapper: toEntity(createProductRequest)
 ProductMapper --> ProductService: product
 ProductService -> ProductRepository: save(product)
@@ -335,9 +365,10 @@ ProductService -> ProductMapper: toDTO(savedProduct)
 ProductMapper --> ProductService: productDto
 ProductService -> ProductResponseFactory: createSingleResponse(productDto)
 ProductResponseFactory --> ProductService: singleProductResponse
+@enduml
 ```
 
-**Step 1:** 4 `call_arrow`s, 4 `return_arrow`s. All labeled, all supported.
+**Step 1:** 4 `call_arrow`s, 4 `return_arrow`s. All labeled, all supported. `target_placement` declared (`com.example.product`).
 
 **Step 2:**
 - `ProductService` → `component_under_test`
@@ -347,7 +378,7 @@ ProductResponseFactory --> ProductService: singleProductResponse
 - 4 `interaction`s, all with `return_arrow`s
 - `data_pipe`s: `product` → `save` → `savedProduct` → `toDTO` → `productDto` → `createSingleResponse`
 
-**Step 3:** Detect base package. Derive paths. Glob. All NEW → CREATE.
+**Step 3:** Read placement (`com.example.product`). Derive paths under it. Glob. All NEW → CREATE.
 
 **Step 4:** Apply transformation rules →
 
@@ -674,16 +705,20 @@ Demonstrates the paired mode: a UML defines orchestration; a `decision_table_fil
 
 **UML Input** (`design/CreateProduct.puml`):
 ```
+@startuml
+' @package com.example.product
 ProductService -> ProductMapper: toEntity(createProductRequest)
 ProductMapper --> ProductService: product
 ProductService -> ProductRepository: save(product)
 ProductRepository --> ProductService: savedProduct : Product
+@enduml
 ```
 
 **Decision Table Input** (`design/ProductMapper.decision.md`):
 ```markdown
 ---
 target: ProductMapper.toEntity
+package: com.example.product
 input:
   request.name: String
   request.price: BigDecimal
@@ -707,7 +742,7 @@ config:
 - `ProductRepository` → `leaf_node` (side effect)
 - Pair `ProductMapper.decision.md` with `ProductMapper.toEntity` → mark the leaf **filled**.
 
-**Step 3:** Detect Java/Spring profile. Derive paths. Glob. Both NEW → CREATE.
+**Step 3:** Detect Java/Spring profile. Read placement (`com.example.product` on both files). Derive paths. Glob. Both NEW → CREATE.
 
 **Step 4:** Generate.
 
