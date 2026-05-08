@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-05-05
+
+### Added
+- `target_placement` concept: every design file declares where its generated code lives. `.puml` files use a `' @package <pkg>` header comment; `.decision.md` files use a `package:` frontmatter field. Treated as a `required_decision`.
+- `language_profile` concept: formalised as a snake_case concept. SKILL.md is language-neutral; the `language_profile` (e.g. `java_spring.md`) owns `target_placement` form, `config:` keys, templates, file paths, naming, UPDATE rules, build command, and `optional_decision` defaults.
+- Step 1 validation now confirms `target_placement` is declared on every design file
+- Step 8 verification checklist confirms each generated file's package matches its source design file's `target_placement`
+
+### Changed
+- Step 3 reads placement per-file from the design instead of auto-detecting a project-wide base package. The `@SpringBootApplication` / glob / `build.gradle` fallback chain is removed.
+- `java_spring.md`'s "Base Package Detection" section replaced by "Target Placement Declaration" (positive form, no negative-case bullets)
+- Both walkthroughs updated to show declared placement (`com.example.product`) and read-placement narration in Step 3
+- `decision_table_file` concept entry now lists `target_placement` alongside `target`, `input`, `output` in frontmatter
+
+## [0.3.0] - 2026-04-28
+
+### Added
+- First-class pure-function support: `decision_table_file` (`design/<Participant>.decision.md`) with YAML frontmatter (`target`, `input`, `output`, optional `config`) and markdown rows
+- `required_decision` and `optional_decision` concepts: every material decision (rounding, scale, nullHandling, exceptionType) must be either demonstrated by rows or pinned by `config:`
+- `config:` key vocabulary in `java_spring.md` (rounding, scale, nullHandling, exceptionType, locale)
+- Refusal protocol when a `required_decision` is unspecified
+- Filled-mode test generation: one `@Test` per row, no TODO markers
+- Walkthrough in `java_spring.md` for paired UML + decision-table flow
+- Dual testing rule: pure-function leaves are mocked in consumer tests AND get standalone decision-table tests
+
+### Changed
+- SKILL.md tightened: removed N-path complexity section; sharper Concepts → Pipeline structure
+
 ## [0.2.1] - 2026-04-14
 
 ### Removed

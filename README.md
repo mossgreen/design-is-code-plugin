@@ -77,27 +77,19 @@ Algorithmic code — ML pipelines, trading algorithms, game engines — falls ou
 
 ## Supported Languages
 
-Currently supports **Java** with **UML sequence diagrams** (PlantUML format). Support for additional languages and design formats is planned.
+Currently supports **Java** (Spring Boot) with **UML sequence diagrams** (PlantUML format) and **decision tables** (Markdown with YAML frontmatter). Support for additional languages is planned.
 
 ## Quick Start
 
-1. Clone this repo: https://github.com/mossgreen/design-is-code-demo, it's a Java Spring Boot project with simple UML sequence diagram examples.
-2. Run `/disc 01_hello-world.puml` in Claude Code session
-3. it requires Java 17.
-
-The `design/` folder may contain both `.puml` UML files and `.decision.md` decision-table files. DisC picks up both in one invocation: UML defines orchestration, decision tables define pure-function leaves.
-
-## Install Design-Is-Code plugin for Claude Code
-
-1. Install the plugin in Claude Code ([plugin docs](https://code.claude.com/docs/en/plugins)) in 2 commands:
+1. Install the plugin (one-time setup):
    ```
    claude plugin marketplace add mossgreen/design-is-code-plugin
    claude plugin install design-is-code@mossgreen-design-is-code --scope user
    ```
-2. Put your UML sequence diagram in your project's `design/` folder
-3. Run `/design-is-code:disc <filename>` in Claude Code
+2. Clone the demo project: https://github.com/mossgreen/design-is-code-demo (Java Spring Boot, requires Java 17, includes UML and decision-table examples).
+3. Open the demo in Claude Code and run `/design-is-code:disc 01_hello-world.puml`.
 
-Verify it's working: open Claude Code in any project and run `/design-is-code:disc`.
+The `design/` folder may contain both `.puml` UML files and `.decision.md` decision-table files. DisC picks up both in one invocation: UML defines orchestration, decision tables define pure-function leaves.
 
 ## Keep the Plugin Up to Date
 

@@ -5,7 +5,7 @@
     "email": "mossgu@outlook.com"
   },
   "metadata": {
-    "description": "UML-to-code plugin using the DisC (Design is Code) methodology"
+    "description": "Transform UML sequence diagrams and decision tables into Java tests and code. Design is the contract, code is the consequence."
   },
   "plugins": [
     {
