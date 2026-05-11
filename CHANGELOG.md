@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- `system_caller` boundary marker: the fixed marker for the entry into the system under test, written as `[*]` in PlantUML. Stands in for the test harness in DisC tests and for the framework (HTTP, message queue, scheduled trigger) in production. Not a `participant` — has no abstraction, no implementation, no constructor entry. Required in every `.puml`: declares the method-under-test's signature explicitly (no more inference from filename/first-participant).
+- "Entry interaction" concept in SKILL.md: the `interaction` whose caller is the `system_caller`. Produces no `verify_test`; declares the method-under-test signature.
+- PlantUML notation for `system_caller` (`[*]`) documented in `java_spring.md`.
+- Step 1 refusal cases: missing `system_caller`, more than one `system_caller`, `system_caller` calling a `leaf_node`, entry interaction inside a fragment.
+- All demo `.puml` files migrated to use the new notation.
+
 ## [0.4.0] - 2026-05-05
 
 ### Added

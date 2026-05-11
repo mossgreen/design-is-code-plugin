@@ -45,6 +45,26 @@ The package is the placement for the leaf's interface, implementation, and test.
 
 ---
 
+## PlantUML notation for `system_caller`
+
+In PlantUML sequence diagrams, the `system_caller` (the boundary marker for the system under test) is written as the literal token `[*]`, borrowed from PlantUML's initial-state notation. It is the source of the entry interaction and (optionally) the target of the final return. Because the `system_caller` is not a `participant`, it is never declared with a `participant` keyword — it appears only inline as the caller of the entry arrow.
+
+```
+@startuml
+' @package com.example.product
+[*] -> ProductService : createProduct(createProductRequest)
+ProductService -> ProductRepository : save(product)
+ProductRepository --> ProductService : savedProduct : Product
+ProductService --> [*] : savedProduct : Product
+@enduml
+```
+
+- Exactly one entry interaction per `.puml`.
+- The entry interaction's `call_arrow` label has the form `method(arg1, arg2, ...)`. The method name is the SUT's public method-under-test. The arguments become test inputs (mocked or real, per the Domain Type Rule below).
+- The optional return arrow `SUT --> [*] : value : Type` declares the explicit final return.
+
+---
+
 ## Naming Conventions
 
 By default, the participant name is the interface name. 
@@ -59,6 +79,8 @@ If no implementation name is defined, use `Default` + interface name.
 | Test method | `should` + verb phrase describing interaction | `shouldSaveOrder`                         |
 | Mock field (collaborator) | camelCase of interface name | `orderMapper`                             |
 | Mock field (data) | Variable name from return label. Type from explicit `: Type` or PascalCase inference | `savedOrder : Order` → field: `Order savedOrder` |
+| Method-under-test name | Method name from the entry interaction's label | `createSale` ← `[*] -> SaleService : createSale(saleRequest)` |
+| Method-under-test parameters | Argument names from the entry interaction's label, types resolved via the Domain Type Rule | `saleRequest` → `@Mock private CreateSaleRequest saleRequest` |
 
 The interface name will be referenced as "InterfaceName"
 the implementation name will be referenced as "ImplementationName"
@@ -166,6 +188,17 @@ Mapping to SKILL.md concepts:
 - `verify()` call = `verify_test`
 - `assertThat(result)` = `result_test`
 
+Mapping from the entry interaction (`[*] -> SUT : method(args)`):
+- `[methodName]` ← method name in the label
+- `[MethodName]` ← `[methodName]` with first letter capitalised (used in `class When[MethodName]`)
+- `[input]` ← argument name(s) from the label, comma-separated
+- `[InputType]` ← argument type(s), resolved per the Domain Type Rule
+- The line `result = [implementationName].[methodName]([input]);` is the materialisation of the entry interaction.
+
+When the SUT has an explicit return to the `system_caller` (`SUT --> [*] : value : Type`):
+- `[FinalReturnType]` ← `Type` from the return label
+- `[expectedReturnMock]` ← `value` from the return label
+
 ---
 
 ## Implementation Template
@@ -194,6 +227,10 @@ public class [ImplementationName] implements [InterfaceName] {
     }
 }
 ```
+
+Mapping from the entry interaction:
+- `[methodName]([InputType] [input])` — the method-under-test signature comes directly from the entry interaction's label.
+- `[ReturnType]` — comes from the explicit return to `system_caller` (`SUT --> [*] : value : Type`) when present; otherwise `void`.
 
 ### Implementation Conventions
 
@@ -357,6 +394,7 @@ Full pipeline example for a simple linear sequence diagram.
 ```
 @startuml
 ' @package com.example.product
+[*] -> ProductService : createProduct(createProductRequest)
 ProductService -> ProductMapper: toEntity(createProductRequest)
 ProductMapper --> ProductService: product
 ProductService -> ProductRepository: save(product)
@@ -365,12 +403,14 @@ ProductService -> ProductMapper: toDTO(savedProduct)
 ProductMapper --> ProductService: productDto
 ProductService -> ProductResponseFactory: createSingleResponse(productDto)
 ProductResponseFactory --> ProductService: singleProductResponse
+ProductService --> [*] : singleProductResponse : SingleProductResponse
 @enduml
 ```
 
-**Step 1:** 4 `call_arrow`s, 4 `return_arrow`s. All labeled, all supported. `target_placement` declared (`com.example.product`).
+**Step 1:** 4 `call_arrow`s, 4 `return_arrow`s, 1 entry interaction (caller = `system_caller`), 1 explicit return to `system_caller`. All labeled, all supported. `target_placement` declared (`com.example.product`).
 
 **Step 2:**
+- Entry interaction targets `ProductService` → confirms `ProductService` is `component_under_test`; method-under-test is `createProduct(createProductRequest)`
 - `ProductService` → `component_under_test`
 - `ProductMapper` → `leaf_node` (pure function — output depends only on inputs)
 - `ProductRepository` → `leaf_node` (side effect — touches the database)
@@ -433,7 +473,8 @@ In addition, `ProductMapper` is a `pure function` leaf without a `decision_table
 
 **Step 8 report:**
 ```
-Arrows:          4 call_arrows parsed
+Entry interaction: present (caller = system_caller, target = ProductService.createProduct)
+Interactions:    1 entry + 4 collaborator = 5
 Orchestrators:   1 (ProductService)
 Leaf nodes:      3 total (1 pure function, 1 side effect, 1 factory)
 Decision tables: 0 filled from decision_table_file, 1 skeleton for humans to fill
@@ -449,6 +490,7 @@ Demonstrates `branch_block` → separate `@Nested` classes per branch.
 
 **UML Input:**
 ```
+[*] -> OrderService : createOrUpdate(orderId, request)
 OrderService -> OrderRepository: findById(orderId)
 OrderRepository --> OrderService: existingOrder
 alt [existingOrder is present]
@@ -560,6 +602,7 @@ Demonstrates `throw_arrow` → two `@Nested` classes governed by `throw_placemen
 
 **UML Input:**
 ```
+[*] -> ResourceUsageValidator : validate(organizationId, resourceId, resourceType)
 ResourceUsageValidator -> ResourceUsageService: getResourceUsages(organizationId, resourceId, resourceType)
 ResourceUsageService --> ResourceUsageValidator: resourceUsages
 alt [resourceUsages is not empty]
@@ -663,6 +706,7 @@ Demonstrates `loop_block` → single-element collections and real values for pri
 
 **UML Input:**
 ```
+[*] -> SaleService : createSale(saleRequest)
 SaleService -> ProductService: getProductByIds(productIds)
 ProductService --> SaleService: products
 SaleService -> ProductService: throwExceptionIfProductNoExist(productIds)
@@ -707,10 +751,12 @@ Demonstrates the paired mode: a UML defines orchestration; a `decision_table_fil
 ```
 @startuml
 ' @package com.example.product
+[*] -> ProductService : createProduct(createProductRequest)
 ProductService -> ProductMapper: toEntity(createProductRequest)
 ProductMapper --> ProductService: product
 ProductService -> ProductRepository: save(product)
 ProductRepository --> ProductService: savedProduct : Product
+ProductService --> [*] : savedProduct : Product
 @enduml
 ```
 

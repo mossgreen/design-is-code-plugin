@@ -45,6 +45,8 @@ What the human authors. The first artifacts in the chain.
 
 - **`throw_arrow`** — A self-arrow (from a `participant` to itself) labeled `<<throws>> ExceptionType`.
 
+- **`system_caller`** — The fixed boundary marker for the entry into the system under test. Stands in for the test harness in DisC tests and for the framework (HTTP, message queue, scheduled trigger) in production. It is **not** a `participant`: it has no abstraction, no implementation, no class to generate, and it is never instantiated, mocked, or placed in a constructor. It exists in the design only to be the caller of the **entry interaction** (and, optionally, the callee of the final return). Exactly one `system_caller` per diagram. The notation used to write the `system_caller` is owned by the `language_profile` (e.g., PlantUML writes it as `[*]`).
+
 **Distinguishing `call_arrow` from `return_arrow`** — when arrow styles are identical, use three signals:
 
 1. **Label format** — A `call_arrow` has parentheses in its label: `method(arg)`. A `return_arrow` has a value name with no parentheses: `result` or `result : Type`.
@@ -63,13 +65,13 @@ What the human authors. The first artifacts in the chain.
 
 - **`language_profile`** — A static reference document at `skills/disc/<language>.md` that owns every language-specific rule the pipeline depends on. SKILL.md is language-neutral; the `language_profile` defines the form of `target_placement`, the recognised `config:` keys, the test/implementation/decision-table templates, file path patterns, naming conventions, UPDATE-mode rules, the build command, and the documented defaults for every `optional_decision`. Step 3a selects which `language_profile` to load based on project signals.
 
-### Subject vs collaborator
+### Participant roles
 
-Classifies each `participant` by its relationship to the test. Determines instantiation vs mocking.
+Each `participant` plays one of two roles. The role determines instantiation, mocking, and constructor membership.
 
-- **`component_under_test`** — The first `participant` in the diagram. Not mocked. Instantiated in tests.
+- **`component_under_test`** — The subject of the test. The `participant` that the `system_caller` calls. Instantiated in test setup via constructor injection of all `collaborator`s. Not mocked.
 
-- **`collaborator`** — Any `participant` other than the `component_under_test`. Mocked in tests. Injected into the `component_under_test` via its constructor.
+- **`collaborator`** — Every other `participant`. Mocked in tests. Injected into the `component_under_test` via its constructor.
 
 ### Composes calls vs terminal
 
@@ -83,7 +85,7 @@ Classifies each `participant` by its relationship to the call graph. Determines 
 
 Derived facts about the design, computed before tests are generated.
 
-- **`interaction`** — One `call_arrow` paired with its optional `return_arrow`. The atomic unit of DisC.
+- **`interaction`** — One `call_arrow` paired with its optional `return_arrow`. The atomic unit of DisC. The interaction whose caller is the `system_caller` is the **entry interaction** — it declares the public method-under-test and produces no `verify_test` (the test harness's call into the SUT is not something to verify). Every other interaction is a **collaborator interaction** and produces a `verify_test`.
 
 - **`data_pipe`** — A relationship between two consecutive `interaction`s in which the `return_arrow` value of the first becomes an argument of the next.
 
@@ -95,7 +97,7 @@ Note: `decision_table` is the *artifact* generated for a `pure function` leaf. `
 
 - **`verify_test`** — A test asserting that a `collaborator` method was called with expected arguments. One `verify_test` per `call_arrow`.
 
-- **`result_test`** — A test asserting that the `component_under_test`'s return value equals an expected value. One `result_test` per final `return_arrow` (the last `return_arrow` back to the `component_under_test`).
+- **`result_test`** — A test asserting that the `component_under_test`'s return value equals an expected value. One `result_test` per final `return_arrow` (the `return_arrow` back to the `system_caller`). Absent when the method-under-test returns void.
 
 - **`stub`** — Configuring what a `collaborator` returns when called. One `stub` per `return_arrow`. Wired in test setup before execution.
 
@@ -112,9 +114,21 @@ Each rule describes how a UML element transforms into test and implementation co
 
 ### `participant` to role
 
-The first `participant` is the `component_under_test`. It is instantiated in test setup via constructor injection of all `collaborator`s.
+The `participant` called by the `system_caller` is the `component_under_test`. It is instantiated in test setup via constructor injection of all `collaborator`s.
 
 Every other `participant` is a `collaborator`. Each `collaborator` becomes a mock in the test and a constructor parameter of the `component_under_test`.
+
+### Entry interaction
+
+The `interaction` whose caller is the `system_caller` is the **entry interaction**. It declares the method-under-test:
+
+- The `call_arrow`'s label is the method name and parameter list invoked on the `component_under_test`.
+- The arguments named in the label become the parameters of the method-under-test. They are `data_pipe` sources available to subsequent interactions.
+- The optional `return_arrow` back to the `system_caller` is the explicit final return (see "Final `return_arrow`").
+
+The entry interaction produces no `verify_test`. There is nothing to verify — the call is the test's invocation of the SUT, not an outbound call from the SUT.
+
+How the method name, parameter types, and return type are derived from the entry interaction's label is owned by the `language_profile`. SKILL.md establishes the role and the structural rule; the profile owns the syntactic and type-resolution details.
 
 ### `interaction` with `return_arrow`
 
@@ -135,12 +149,14 @@ A `call_arrow` with no following `return_arrow` produces:
 
 ### Final `return_arrow`
 
-The last `return_arrow` back to the `component_under_test` produces:
+A `return_arrow` from the `component_under_test` back to the `system_caller` produces:
 - A result variable in the test to capture the return value.
 - The method-under-test is called in test setup, and its return value is stored.
 - One `result_test`: assert the captured result equals the expected `data_mock`.
 
 In implementation, this becomes the method's return statement.
+
+When this `return_arrow` is absent, the method-under-test returns void: no `result_test`, and the implementation method declares a void return.
 
 ### `data_pipe`
 
@@ -292,15 +308,21 @@ Refuse when:
 - A `decision_table_file`'s `target:` does not resolve to a `pure function` leaf in any UML in the input set (see Step 2 pairing)
 - A `decision_table_file` leaves a `required_decision` unspecified AND `config:` does not pin it. The refusal message names the decision and instructs the human to either (a) add a row that demonstrates the choice, or (b) add the corresponding `config:` key (see the `language_profile` for the recognized key for each decision).
 - A `decision_table_file`'s `config:` contains a key not enumerated in the `language_profile`. DisC does not silently ignore unknown keys.
+- A diagram has no `system_caller`. Every `.puml` must declare exactly one `system_caller` (the caller of the entry interaction).
+- A diagram declares more than one `system_caller`. One `.puml` = one method-under-test = one entry interaction.
+- A diagram's entry interaction targets a `leaf_node` (no outgoing `call_arrow`s). The `system_caller` must call an orchestrator.
+- A diagram's entry interaction is nested inside a `branch_block`, `loop_block`, or other fragment. The entry interaction lives at top level.
 
 ### Step 2: Classify
 
 Identify which concepts apply:
 
-1. List all `participant`s → classify each as `component_under_test`, `orchestrator`, or `leaf_node`
-2. List all `call_arrow`s → each is an `interaction`
-3. Identify `loop_block`s, `branch_block`s, `throw_arrow`s
-4. Sub-classify each `leaf_node` by asking: *does its output depend only on inputs, does it touch the world, or is it a pass-through factory?*
+1. Locate the `system_caller`. The `participant` it calls is the `component_under_test`.
+2. Classify every other `participant` as a `collaborator`.
+3. For `component_under_test` and `collaborator` participants, sub-classify by call-graph role: `orchestrator` (has outgoing `call_arrow`s) or `leaf_node` (no outgoing `call_arrow`s).
+4. List all `call_arrow`s → each is an `interaction`. The entry interaction (caller = `system_caller`) is counted but produces no `verify_test`.
+5. Identify `loop_block`s, `branch_block`s, `throw_arrow`s.
+6. Sub-classify each `leaf_node` by asking: *does its output depend only on inputs, does it touch the world, or is it a pass-through factory?*
 
 | Sub-kind | Identified by | DisC action |
 |---|---|---|
@@ -308,7 +330,7 @@ Identify which concepts apply:
 | **side effect** | Touches external systems (DB, network, clock, queue, etc.) | Mocked in consumer only — no standalone test |
 | **factory** | Name ends in `Factory` | No standalone test — assumed pass-through constructor |
 
-5. Pair each `decision_table_file` with its target `pure function` leaf:
+7. Pair each `decision_table_file` with its target `pure function` leaf:
    - Parse the `target: Class.method` frontmatter field.
    - Locate the participant whose interface name matches `Class` across all UMLs in the run. It must be a `leaf_node` sub-classified as `pure function`.
    - Confirm the UML contains a `call_arrow` to that participant with method name `method`.
@@ -347,8 +369,9 @@ For each classified element, apply its transformation rule from the Transformati
 | Element | Rule | Produces |
 |---|---|---|
 | `participant` | "participant to role" | Mocks, constructor wiring |
-| `interaction` + `return_arrow` | "interaction with return_arrow" | `stub` + `verify_test` |
-| `interaction` (void) | "interaction without return_arrow" | `verify_test` only |
+| Entry `interaction` | "Entry interaction" | Method-under-test signature; test method invocation; `data_pipe` sources |
+| Collaborator `interaction` + `return_arrow` | "interaction with return_arrow" | `stub` + `verify_test` |
+| Collaborator `interaction` (void) | "interaction without return_arrow" | `verify_test` only |
 | Final `return_arrow` | "Final return_arrow" | `result_test` |
 | `data_pipe` | "data_pipe" | Return value → next argument |
 | `loop_block` | "loop_block" | Single-element collection, iteration |
@@ -369,7 +392,7 @@ Before writing anything, pass every check. Fix generated code if any check fails
 
 **Four critical checks:**
 
-1. **Arrow parity** — `call_arrow` count == `verify_test` count. Each `stub` has a corresponding `return_arrow`. The `result_test` matches the final return value.
+1. **Arrow parity** — `verify_test` count == count of *collaborator interactions* (interactions whose caller is the `component_under_test`). The entry interaction is excluded — it produces no `verify_test`. Each `stub` has a corresponding `return_arrow`. The `result_test` matches the value labeled on the `return_arrow` back to the `system_caller`; if no such arrow is present, the method-under-test is void and there is no `result_test`.
 
 2. **Data flow integrity** — Each `data_pipe` connects correctly. Implementation call order matches `verify_test` order. Variable names match `data_mock` names.
 
@@ -430,7 +453,8 @@ Use the `language_profile`'s UPDATE mode rules per file type.
 
 **Summary:**
 ```
-Arrows:          [N] call_arrows parsed
+Entry interaction: present (caller = system_caller, target = <SUT>.<method>)
+Interactions:    [E] entry + [N] collaborator = [total]
 Orchestrators:   [N] participants with outgoing arrows
 Leaf nodes:      [M] total ([P] pure function, [S] side effect, [F] factory)
 Decision tables: [K] filled from decision_table_file, [Q] skeletons for humans to fill
