@@ -54,14 +54,14 @@ In PlantUML sequence diagrams, the `system_caller` (the boundary marker for the 
 ' @package com.example.product
 [*] -> ProductService : createProduct(createProductRequest)
 ProductService -> ProductRepository : save(product)
-ProductRepository --> ProductService : savedProduct : Product
-ProductService --> [*] : savedProduct : Product
+ProductService <-- ProductRepository : savedProduct : Product
+[*] <-- ProductService : savedProduct : Product
 @enduml
 ```
 
 - Exactly one entry interaction per `.puml`.
 - The entry interaction's `call_arrow` label has the form `method(arg1, arg2, ...)`. The method name is the SUT's public method-under-test. The arguments become test inputs (mocked or real, per the Domain Type Rule below).
-- The optional return arrow `SUT --> [*] : value : Type` declares the explicit final return.
+- The optional return arrow `[*] <-- SUT : value : Type` declares the explicit final return.
 
 ---
 
@@ -195,7 +195,7 @@ Mapping from the entry interaction (`[*] -> SUT : method(args)`):
 - `[InputType]` ← argument type(s), resolved per the Domain Type Rule
 - The line `result = [implementationName].[methodName]([input]);` is the materialisation of the entry interaction.
 
-When the SUT has an explicit return to the `system_caller` (`SUT --> [*] : value : Type`):
+When the SUT has an explicit return to the `system_caller` (`[*] <-- SUT : value : Type`):
 - `[FinalReturnType]` ← `Type` from the return label
 - `[expectedReturnMock]` ← `value` from the return label
 
@@ -230,7 +230,7 @@ public class [ImplementationName] implements [InterfaceName] {
 
 Mapping from the entry interaction:
 - `[methodName]([InputType] [input])` — the method-under-test signature comes directly from the entry interaction's label.
-- `[ReturnType]` — comes from the explicit return to `system_caller` (`SUT --> [*] : value : Type`) when present; otherwise `void`.
+- `[ReturnType]` — comes from the explicit return to `system_caller` (`[*] <-- SUT : value : Type`) when present; otherwise `void`.
 
 ### Implementation Conventions
 
@@ -396,14 +396,14 @@ Full pipeline example for a simple linear sequence diagram.
 ' @package com.example.product
 [*] -> ProductService : createProduct(createProductRequest)
 ProductService -> ProductMapper: toEntity(createProductRequest)
-ProductMapper --> ProductService: product
+ProductService <-- ProductMapper: product
 ProductService -> ProductRepository: save(product)
-ProductRepository --> ProductService: savedProduct : Product
+ProductService <-- ProductRepository: savedProduct : Product
 ProductService -> ProductMapper: toDTO(savedProduct)
-ProductMapper --> ProductService: productDto
+ProductService <-- ProductMapper: productDto
 ProductService -> ProductResponseFactory: createSingleResponse(productDto)
-ProductResponseFactory --> ProductService: singleProductResponse
-ProductService --> [*] : singleProductResponse : SingleProductResponse
+ProductService <-- ProductResponseFactory: singleProductResponse
+[*] <-- ProductService : singleProductResponse : SingleProductResponse
 @enduml
 ```
 
@@ -492,17 +492,17 @@ Demonstrates `branch_block` → separate `@Nested` classes per branch.
 ```
 [*] -> OrderService : createOrUpdate(orderId, request)
 OrderService -> OrderRepository: findById(orderId)
-OrderRepository --> OrderService: existingOrder
+OrderService <-- OrderRepository: existingOrder
 alt [existingOrder is present]
     OrderService -> OrderMapper: updateEntity(existingOrder, request)
-    OrderMapper --> OrderService: updatedOrder
+    OrderService <-- OrderMapper: updatedOrder
     OrderService -> OrderRepository: save(updatedOrder)
-    OrderRepository --> OrderService: savedOrder
+    OrderService <-- OrderRepository: savedOrder
 else [not found]
     OrderService -> OrderMapper: toEntity(request)
-    OrderMapper --> OrderService: newOrder
+    OrderService <-- OrderMapper: newOrder
     OrderService -> OrderRepository: save(newOrder)
-    OrderRepository --> OrderService: savedOrder
+    OrderService <-- OrderRepository: savedOrder
 end
 ```
 
@@ -604,7 +604,7 @@ Demonstrates `throw_arrow` → two `@Nested` classes governed by `throw_placemen
 ```
 [*] -> ResourceUsageValidator : validate(organizationId, resourceId, resourceType)
 ResourceUsageValidator -> ResourceUsageService: getResourceUsages(organizationId, resourceId, resourceType)
-ResourceUsageService --> ResourceUsageValidator: resourceUsages
+ResourceUsageValidator <-- ResourceUsageService: resourceUsages
 alt [resourceUsages is not empty]
     ResourceUsageValidator -> ResourceUsageValidator: <<throws>> ResourceInUseException
 end
@@ -708,17 +708,17 @@ Demonstrates `loop_block` → single-element collections and real values for pri
 ```
 [*] -> SaleService : createSale(saleRequest)
 SaleService -> ProductService: getProductByIds(productIds)
-ProductService --> SaleService: products
+SaleService <-- ProductService: products
 SaleService -> ProductService: throwExceptionIfProductNoExist(productIds)
 SaleService -> SaleBuilderFactory: create()
-SaleBuilderFactory --> SaleService: saleBuilder
+SaleService <-- SaleBuilderFactory: saleBuilder
 loop for each lineItem
     SaleService -> SaleBuilder: with(product, quantity)
 end
 SaleService -> SaleBuilder: build()
-SaleBuilder --> SaleService: sale
+SaleService <-- SaleBuilder: sale
 SaleService -> SaleResponseFactory: create(sale)
-SaleResponseFactory --> SaleService: saleResponse
+SaleService <-- SaleResponseFactory: saleResponse
 ```
 
 **Key test patterns for loop:**
@@ -753,10 +753,10 @@ Demonstrates the paired mode: a UML defines orchestration; a `decision_table_fil
 ' @package com.example.product
 [*] -> ProductService : createProduct(createProductRequest)
 ProductService -> ProductMapper: toEntity(createProductRequest)
-ProductMapper --> ProductService: product
+ProductService <-- ProductMapper: product
 ProductService -> ProductRepository: save(product)
-ProductRepository --> ProductService: savedProduct : Product
-ProductService --> [*] : savedProduct : Product
+ProductService <-- ProductRepository: savedProduct : Product
+[*] <-- ProductService : savedProduct : Product
 @enduml
 ```
 
