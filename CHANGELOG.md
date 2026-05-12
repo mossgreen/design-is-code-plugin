@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-05-12
+
+### Changed
+- Pipeline step headings renamed for clearer user-facing display (other platforms calling `/disc` show these as a progress sequence): `Validate Inputs` → `Validate Design`, `Classify` → `Classify Participants`, `Discover Context` → `Resolve Targets`, `Generate (apply Transformation Rules)` → `Generate Tests`, `Quality Gate` → `Check Tests`, `Implement (two-phase wall)` → `Generate Implementation`. Steps 7 and 8 unchanged. Step numbers unchanged.
+- Walkthrough examples in `java_spring.md` now use SUT-anchored arrow style consistent with the demo `.puml` files: `SUT <-- Collaborator: value` for returns (not `Collaborator --> SUT: value`), and `[*] <-- SUT: value` for the return to `system_caller` (not `SUT --> [*]: value`). The boundary marker `[*]` and the SUT always anchor the left side of every line; arrow direction shows data flow. PlantUML accepts both forms; the disambiguation rule is unchanged.
+
 ## [0.5.0] - 2026-05-12
 
 ### Added
