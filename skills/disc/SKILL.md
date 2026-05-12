@@ -273,7 +273,7 @@ $ARGUMENTS
 
 Execute these eight steps in order. Each step must be complete before the next begins. Report each step using its `### Step N: <name>` heading from below as the section label in your response.
 
-### Step 1: Validate Inputs
+### Step 1: Validate Design
 
 The input set contains at least one `.puml` (UML sequence diagram) and may also contain one or more `decision_table_file`s (`<Participant>.decision.md`).
 
@@ -313,7 +313,7 @@ Refuse when:
 - A diagram's entry interaction targets a `leaf_node` (no outgoing `call_arrow`s). The `system_caller` must call an orchestrator.
 - A diagram's entry interaction is nested inside a `branch_block`, `loop_block`, or other fragment. The entry interaction lives at top level.
 
-### Step 2: Classify
+### Step 2: Classify Participants
 
 Identify which concepts apply:
 
@@ -337,7 +337,7 @@ Identify which concepts apply:
    - Mark that leaf as **filled**. Record the attached `decision_table_file`.
    - If no match exists, or the matched participant is a `side effect` or `factory`, refuse per Step 1's refusal protocol.
 
-### Step 3: Discover Context
+### Step 3: Resolve Targets
 
 **3a. Detect language/framework** — Determine which `language_profile` to load:
 
@@ -362,7 +362,7 @@ Load the matched `language_profile`. All subsequent steps use its conventions.
 
 **3f. Set mode per file:** NEW → **CREATE**, EXISTS → **UPDATE**
 
-### Step 4: Generate (apply Transformation Rules)
+### Step 4: Generate Tests
 
 For each classified element, apply its transformation rule from the Transformation Rules section above:
 
@@ -384,7 +384,7 @@ Use the `language_profile`'s test class template and naming conventions.
 
 **Generation order:** domain types → interfaces → tests → `decision_table` skeletons
 
-### Step 5: Quality Gate
+### Step 5: Check Tests
 
 Before writing anything, pass every check. Fix generated code if any check fails.
 
@@ -412,7 +412,7 @@ Before writing anything, pass every check. Fix generated code if any check fails
    - `loop_block` test data uses single-element collection
    - Primitives/final classes use real values, not mocks
 
-### Step 6: Implement (two-phase wall)
+### Step 6: Generate Implementation
 
 **Re-read the test file. Do NOT reference the UML diagram.**
 

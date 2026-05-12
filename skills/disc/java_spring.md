@@ -782,7 +782,7 @@ config:
 
 **Step 1:** Validate both inputs. UML has 2 `call_arrow`s. Decision table has well-formed frontmatter, 3 rows.
 
-**Step 2:** Classify.
+**Step 2:** Classify Participants.
 - `ProductService` → `component_under_test`
 - `ProductMapper` → `leaf_node` (pure function)
 - `ProductRepository` → `leaf_node` (side effect)
@@ -790,7 +790,7 @@ config:
 
 **Step 3:** Detect Java/Spring profile. Read placement (`com.example.product` on both files). Derive paths. Glob. Both NEW → CREATE.
 
-**Step 4:** Generate.
+**Step 4:** Generate Tests.
 
 Orchestration test for `ProductService` — standard mockist style from UML (one `verify_test` per `call_arrow`).
 
@@ -826,9 +826,9 @@ class DefaultProductMapperTest {
 }
 ```
 
-**Step 5:** Quality Gate. `required_decision` check: `nullHandling` is pinned by `config:` to `throw`; `exceptionType` is named in the exception row (`IllegalArgumentException`); `rounding` not relevant (no decimal arithmetic); `scale` not relevant. All `required_decision` entries pinned or irrelevant. Pass.
+**Step 5:** Check Tests. `required_decision` check: `nullHandling` is pinned by `config:` to `throw`; `exceptionType` is named in the exception row (`IllegalArgumentException`); `rounding` not relevant (no decimal arithmetic); `scale` not relevant. All `required_decision` entries pinned or irrelevant. Pass.
 
-**Step 6:** Implement. Reading the filled tests and the `config:` block:
+**Step 6:** Generate Implementation. Reading the filled tests and the `config:` block:
 - `config: nullHandling: throw` requires a null-check before trimming.
 - Row 1 requires field copy.
 - Row 2 requires `.trim()` on the name.
