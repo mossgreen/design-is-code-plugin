@@ -89,6 +89,14 @@ Derived facts about the design, computed before tests are generated.
 
 - **`data_pipe`** — A relationship between two consecutive `interaction`s in which the `return_arrow` value of the first becomes an argument of the next.
 
+- **`participant_target`** — A declaration on a `participant` that tells DisC whether to CREATE it as a new abstraction, REUSE an existing type as-is, or UPDATE an existing type by adding methods. Absent by default (meaning `create`). Three forms:
+
+  - **`create`** (default when no stereotype is declared on the participant): generate the interface, implementation, and tests for this participant under the file's `target_placement`. This is the behaviour DisC had before `participant_target` existed.
+  - **`existing:<fqn>`**: this participant is already implemented at the fully-qualified name `<fqn>`. DisC does not generate files for it; it appears only as a `collaborator` mock and constructor parameter. A participant declared as `existing` must have no outgoing `call_arrow`s (REUSE means as-is — no behavioural change).
+  - **`extend:<fqn>:+method1,+method2,...`**: this participant exists at `<fqn>` but the design adds the listed methods. DisC opens the existing files (interface, implementation, test) in UPDATE mode and adds only the listed signatures.
+
+  The syntactic form of the stereotype is owned by the `language_profile` (e.g., the PlantUML notation `<<@class:fqn>>` is defined in `java_spring.md`). The abstract concept defines what the declaration *means*; the profile defines how it *looks* in the diagram.
+
 ### Test Outputs
 
 What is generated in Phase 1 (design → tests).
@@ -273,6 +281,41 @@ $ARGUMENTS
 
 Execute these eight steps in order. Each step must be complete before the next begins. Report each step using its `### Step N: <name>` heading from below as the section label in your response.
 
+### Plan mode (dry-run)
+
+When `$ARGUMENTS` contains the token `--plan`, DisC executes Steps 1 through 6 as planning only and emits a single JSON object to stdout in place of Steps 7 and 8. **No files are written. No file-writing tool is invoked.** Plan mode lets host tools (e.g., DisC Studio) render a preview-before-apply panel.
+
+The JSON envelope:
+
+```json
+{
+  "actions": [
+    {
+      "type": "CREATE" | "UPDATE" | "REUSE",
+      "path": "src/main/java/com/foo/X.java",
+      "participant": "X",
+      "reason": "string explanation",
+      "addedMethods": ["m1", "m2"]
+    }
+  ],
+  "warnings": [
+    "OwnerRepository.findById signature mismatch — using catalog form"
+  ],
+  "summary": {
+    "create": 3, "update": 1, "reuse": 2,
+    "verifyTests": 4, "resultTests": 1, "decisionTables": 0
+  }
+}
+```
+
+- `type: "CREATE"` — file does not exist (or `participant_target` is `create`); plan would `Write` it.
+- `type: "UPDATE"` — file exists (or `participant_target` is `extend:...`); plan would `Edit` it. `addedMethods` lists what would be added.
+- `type: "REUSE"` — `participant_target` is `existing:<fqn>` or the participant resolves to an already-correct file with no additions. Plan would not touch this file. Include the row so the host can show "we'll use your existing X as-is".
+
+The envelope is the **only** thing emitted on stdout in plan mode. Steps 1–6 are reasoned about internally; no per-step narration is printed. The exit code is 0 on success and non-zero with a JSON error envelope (`{"error": "..."}`) on refusal.
+
+When `--plan` is absent, the pipeline runs normally and produces Steps 1–8 narration plus written files.
+
 ### Step 1: Validate Design
 
 The input set contains at least one `.puml` (UML sequence diagram) and may also contain one or more `decision_table_file`s (`<Participant>.decision.md`).
@@ -312,6 +355,9 @@ Refuse when:
 - A diagram declares more than one `system_caller`. One `.puml` = one method-under-test = one entry interaction.
 - A diagram's entry interaction targets a `leaf_node` (no outgoing `call_arrow`s). The `system_caller` must call an orchestrator.
 - A diagram's entry interaction is nested inside a `branch_block`, `loop_block`, or other fragment. The entry interaction lives at top level.
+- A `participant_target` stereotype is malformed: empty FQN (`<<@class:>>`), FQN that does not match the `language_profile`'s package convention, or a `+method` listed in an `extend:` form whose name does not appear as a `call_arrow` callee method on this participant in any UML in the input set.
+- A participant declared with `participant_target = existing:<fqn>` has any outgoing `call_arrow`. Reuse-as-is means no behavioural change; if the design needs to call methods on this participant, the participant must be a different role (typically `extend:`) or the design must be restructured.
+- A `+method` listed in an `extend:<fqn>:+method,...` does not appear as a `call_arrow` callee on this participant. Every listed method must be exercised by the design.
 
 ### Step 2: Classify Participants
 
@@ -329,6 +375,14 @@ Identify which concepts apply:
 | **pure function** | Output depends only on inputs | `decision_table` skeleton (human fills in) — or filled rows when a `decision_table_file` is attached |
 | **side effect** | Touches external systems (DB, network, clock, queue, etc.) | Mocked in consumer only — no standalone test |
 | **factory** | Name ends in `Factory` | No standalone test — assumed pass-through constructor |
+
+6.5. Read the `participant_target` declared on each `participant`. Parse the stereotype using the `language_profile`'s notation. Record each participant's `participant_target` as one of:
+
+- `create` (no stereotype, or explicit `create`) — the default; DisC will generate this participant's interface, implementation, and test in Step 3 onwards.
+- `existing:<fqn>` — DisC will not generate files; the participant is referenced only as a `collaborator`.
+- `extend:<fqn>:+method1,+method2,...` — DisC will open the existing files at `<fqn>` in UPDATE mode and add the listed `+method` signatures.
+
+Refusals for malformed stereotypes, `existing` participants with outgoing arrows, and unmatched `+method` lists belong to Step 1 — by this point they have already been ruled out.
 
 7. Pair each `decision_table_file` with its target `pure function` leaf:
    - Parse the `target: Class.method` frontmatter field.
@@ -360,7 +414,15 @@ Load the matched `language_profile`. All subsequent steps use its conventions.
 
 **3e. For each existing file:** read it, identify what's already there (mocks, test groups, methods, signatures).
 
-**3f. Set mode per file:** NEW → **CREATE**, EXISTS → **UPDATE**
+**3f. Set mode per file from `participant_target`:**
+
+For each participant, derive the mode from its declared `participant_target` (recorded in Step 2.6.5):
+
+- `participant_target = create` → mode is **CREATE** for the participant's interface, implementation, and test. File paths come from the file's `target_placement` + the `language_profile`'s naming and package-placement conventions.
+- `participant_target = existing:<fqn>` → mode is **REUSE**. No interface, implementation, or test is generated for this participant. It is only referenced as a `collaborator` mock and constructor parameter in the `component_under_test`'s test and implementation. The participant's existing signatures are read from source to populate the `@Mock` field types where needed.
+- `participant_target = extend:<fqn>:+method,...` → mode is **UPDATE** for all three files (interface, implementation, test). The FQN parses to the file path per the `language_profile`. Only the listed `+method` signatures and their corresponding test groups are added; everything else in the existing files is sacred.
+
+**Fallback for participants with no `participant_target` declared:** glob the conventional file path per the `language_profile`. NEW → **CREATE**, EXISTS → **UPDATE**. This preserves backward compatibility with v0.5.x `.puml` files that predate the stereotype convention.
 
 ### Step 4: Generate Tests
 

@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-05-19
+
+### Added
+- `participant_target` concept (SKILL.md, Composition block): participants may now declare whether DisC should CREATE them new (default), REUSE an existing type as-is (`existing:<fqn>`), or UPDATE an existing type by adding methods (`extend:<fqn>:+method,...`). Replaces Step 3's heuristic glob-based file-mode detection when declared; the glob fallback is preserved for `.puml` files with no participant prelude.
+- PlantUML stereotype notation for `participant_target` (`java_spring.md`): `<<@class:fqn>>` for reuse-as-is, `<<@class:fqn, +method1, +method2>>` for extend-with-new-methods. Documented with grammar, FQN form, method-list form, prelude position, and a worked example covering all three forms.
+- Step 2.6.5: read `participant_target` per participant after the leaf-node sub-classification.
+- Step 1 refusal cases for malformed stereotypes, `existing` participants with outgoing arrows, and `+method` lists that name methods not exercised by the diagram.
+- Step 3f rewrite: file mode now derives primarily from `participant_target`; glob fallback covers v0.5.x files with no stereotypes.
+- UPDATE Mode Rules clarification for the `extend:` case — UPDATE applies to all three files (interface, impl, test) for that participant; only listed `+method` signatures and matching `@Nested` test groups are added.
+- Plan mode (`--plan` flag in `$ARGUMENTS`): executes Steps 1–6 internally and emits a single JSON envelope (`{actions, warnings, summary}`) to stdout instead of writing files. Enables host tools (DisC Studio) to render a preview-before-apply panel without mutating the user's filesystem.
+
+### Changed
+- Step 2 grows sub-step 2.6.5 to read `participant_target` stereotypes per participant.
+- Step 3f rewritten — was `NEW → CREATE, EXISTS → UPDATE` based on file globs; now derives from `participant_target` with glob as fallback.
+
 ## [0.5.1] - 2026-05-12
 
 ### Changed

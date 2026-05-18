@@ -65,6 +65,74 @@ ProductService <-- ProductRepository : savedProduct : Product
 
 ---
 
+## PlantUML notation for `participant_target`
+
+A `participant_target` is declared on a participant using PlantUML's stereotype syntax — `<<...>>` placed after the participant name on its `participant` declaration line. The three forms map directly to the abstract values defined in `SKILL.md`.
+
+```plantuml
+@startuml
+' @package com.example.sale
+participant SaleService                                                       ' create (default)
+participant Money               <<@class:com.example.common.Money>>           ' existing
+participant DiscountRepository  <<@class:com.example.sale.DiscountRepository, +findActive>>  ' extend
+```
+
+### Stereotype grammar
+
+- **`<<@class:fqn>>`** — abstract `existing:<fqn>`. Participant is reused from the type at `<fqn>`. DisC generates no files for it.
+- **`<<@class:fqn, +method1, +method2>>`** — abstract `extend:<fqn>:+method1,+method2`. Participant exists at `<fqn>` but the design adds the listed methods. Each `+method` must match a `call_arrow` callee method on this participant in the diagram.
+- **Absence of stereotype** — implicit `create`. The default for greenfield design and the prior behaviour for all v0.5.x `.puml` files.
+
+### FQN form
+
+`com.foo.bar.PascalCaseName` — must match the Java/Spring package convention and resolve to either an interface (preferred) or class file under `src/main/java/{basePackagePath}/.../<PascalCaseName>.java`.
+
+When both `Foo` (interface) and `DefaultFoo` (impl) exist for the same abstraction, `@class:` MUST point to the **interface**. DisC locates the implementation via the naming convention (`Default` + interface name, or the colon-syntax override). Pointing `@class:` at an `*Impl` would tie the design to a specific implementation and is refused by Step 1.
+
+### Method-list form
+
+`+method1, +method2` — comma-separated. Each `+method` is the camelCase method name only — no parameter list, no return type. The parameters and return type come from the diagram's `call_arrow` for that method.
+
+The listed methods must each appear as a `call_arrow` label on this participant somewhere in the input set. A `+method` with no matching arrow refuses at Step 1: the design has declared an extension that does not exercise the new method.
+
+### Where the prelude sits in a `.puml`
+
+The participant declarations live between the `' @package ...` header and the first `call_arrow`. Existing PlantUML syntax — they declare the diagram's cast up front. Participants referenced only via inline `A -> B : method(x)` (without an explicit `participant` declaration) default to `create`. Authors who want REUSE or UPDATE must declare the participant explicitly with the stereotype.
+
+### Worked example
+
+```plantuml
+@startuml
+' @package com.example.sale
+participant SaleService
+participant OwnerRepository    <<@class:com.example.owner.OwnerRepository>>
+participant DiscountRepository <<@class:com.example.sale.DiscountRepository, +findActive>>
+
+[*] -> SaleService : createSale(saleRequest)
+SaleService -> OwnerRepository : findById(ownerId)
+SaleService <-- OwnerRepository : owner
+SaleService -> DiscountRepository : findActive(ownerId)
+SaleService <-- DiscountRepository : discounts
+[*] <-- SaleService : saleResponse : SaleResponse
+@enduml
+```
+
+Each `participant` declaration must fit on a single line — including the stereotype. Multi-line declarations are not supported.
+
+Step 3 outcomes per participant:
+
+| Participant            | `participant_target`              | Mode    | Generated files |
+|------------------------|-----------------------------------|---------|---|
+| `SaleService`          | (no stereotype → `create`)        | CREATE  | `SaleService.java`, `DefaultSaleService.java`, `DefaultSaleServiceTest.java` |
+| `OwnerRepository`      | `existing:com.example.owner...`   | REUSE   | none — referenced only as `@Mock` in `DefaultSaleServiceTest` |
+| `DiscountRepository`   | `extend:...:+findActive`          | UPDATE  | adds `findActive(...)` to existing `DiscountRepository.java`, `DefaultDiscountRepository.java`, `DefaultDiscountRepositoryTest.java` |
+
+`OwnerRepository.findById`'s signature is read from the existing source so the `@Mock OwnerRepository ownerRepository` field and the `when(ownerRepository.findById(any())).thenReturn(owner)` stub type-check.
+
+`DiscountRepository` gets a new method signature appended to the existing interface, a new method body appended to the implementation (with any new constructor parameters and fields if `findActive` introduces new dependencies — though in this example it does not), and a new `@Nested` test class for `WhenFindActive`. UPDATE Mode Rules apply: existing methods, mocks, and tests are sacred.
+
+---
+
 ## Naming Conventions
 
 By default, the participant name is the interface name. 
@@ -258,6 +326,8 @@ Mapping from the entry interaction:
 | Test | New `@Nested` class + new `@Mock` fields if not declared | Existing `@Nested`, `@Test`, `@Mock`, setup |
 | Implementation | New method + new fields + new constructor params | Existing methods, logging, annotations |
 | Domain type (EXISTS) | Nothing — skip | Everything |
+
+For participants with `participant_target = extend:<fqn>:+method1,+method2,...`, UPDATE mode applies to all three files (interface, implementation, test) for that participant. The rules above govern *what* is added: only the listed `+method` signatures, their corresponding method bodies, and one `@Nested` class per `+method` in the test. Methods that already exist on the participant in the source are read for type information (to populate `@Mock` types in dependent tests) but are not re-emitted.
 
 ---
 

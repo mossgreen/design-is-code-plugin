@@ -91,6 +91,21 @@ Currently supports **Java** (Spring Boot) with **UML sequence diagrams** (PlantU
 
 The `design/` folder may contain both `.puml` UML files and `.decision.md` decision-table files. DisC picks up both in one invocation: UML defines orchestration, decision tables define pure-function leaves.
 
+### Reusing existing code
+
+By default DisC treats every participant as a new abstraction to generate (CREATE). A `.puml` can declare otherwise by attaching a `<<@class:...>>` stereotype to a participant:
+
+```plantuml
+participant Money                <<@class:com.example.common.Money>>           ' reuse as-is
+participant DiscountRepository   <<@class:com.example.sale.DiscountRepository, +findActive>>  ' add findActive
+```
+
+See [`skills/disc/java_spring.md`](skills/disc/java_spring.md#plantuml-notation-for-participant_target) for the full grammar. The same `.puml` works without stereotypes — DisC falls back to its prior glob-based detection for backward compatibility.
+
+### Preview before applying (`--plan` mode)
+
+Append `--plan` to the command (`/design-is-code:disc design/foo.puml --plan`) to run the pipeline in dry-run mode. DisC emits a single JSON envelope of file actions to stdout without writing anything. Designed for host tools like DisC Studio to render a preview panel before the user commits to a real run.
+
 ## Keep the Plugin Up to Date
 
 Third-party marketplaces have auto-update disabled by default. To manually pull the latest version:
