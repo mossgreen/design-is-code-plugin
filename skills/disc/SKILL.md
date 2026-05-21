@@ -89,13 +89,18 @@ Derived facts about the design, computed before tests are generated.
 
 - **`data_pipe`** — A relationship between two consecutive `interaction`s in which the `return_arrow` value of the first becomes an argument of the next.
 
-- **`participant_target`** — A declaration on a `participant` that tells DisC whether to CREATE it as a new abstraction, REUSE an existing type as-is, or UPDATE an existing type by adding methods. Absent by default (meaning `create`). Three forms:
+- **`participant_target`** — A declaration on a `participant` that tells DisC whether to CREATE it as a new abstraction, REUSE an existing type as-is, UPDATE an existing type by adding methods, or DEFER its design to a separate `.puml`. Absent by default (meaning `create`). Four mutually-exclusive forms:
 
   - **`create`** (default when no stereotype is declared on the participant): generate the interface, implementation, and tests for this participant under the file's `target_placement`. This is the behaviour DisC had before `participant_target` existed.
   - **`existing:<fqn>`**: this participant is already implemented at the fully-qualified name `<fqn>`. DisC does not generate files for it; it appears only as a `collaborator` mock and constructor parameter. A participant declared as `existing` must have no outgoing `call_arrow`s (REUSE means as-is — no behavioural change).
   - **`extend:<fqn>:+method1,+method2,...`**: this participant exists at `<fqn>` but the design adds the listed methods. DisC opens the existing files (interface, implementation, test) in UPDATE mode and adds only the listed signatures.
+  - **`defer:<relative_puml_path>`**: this participant is called by the SUT but its internals have not yet been designed; design them later in their own `.puml` at the given path. DisC generates the interface plus a throwing stub-implementation now, with no test class and no decision table. The actual implementation will come from running DisC on the child `.puml`. Like `existing:`, a `defer:` participant must have no outgoing `call_arrow`s in *this* diagram — its outgoing calls live in its own `.puml`. The path is optional in the stereotype; absent, the profile defaults to a sibling-folder convention (see `language_profile`).
 
-  The syntactic form of the stereotype is owned by the `language_profile` (e.g., the PlantUML notation `<<@class:fqn>>` is defined in `java_spring.md`). The abstract concept defines what the declaration *means*; the profile defines how it *looks* in the diagram.
+  Exactly one form per participant. The syntactic form of the stereotype is owned by the `language_profile` (e.g., the PlantUML notations `<<@class:fqn>>` and `<<defer-design>>` are defined in `java_spring.md`). The abstract concept defines what each declaration *means*; the profile defines how it *looks* in the diagram.
+
+  **One-hop mocking invariant.** The SUT's test always mocks its direct `collaborator`s as units, regardless of their `participant_target`. A `collaborator`'s own dependencies (its grandchildren in the call tree) never bubble up to the SUT's test. This is true for `create`, `existing:`, `extend:`, and `defer:` alike — each `collaborator` is one mock at the SUT's level.
+
+  **Direction of flow.** DisC is *outside-in* for interfaces and *inside-out* for implementations. A participant's interface is pinned by its callers' `call_arrow`s — the leaf does not author its own contract. Implementation flows the other way: each leaf is implemented from its own tests in isolation, and the orchestrator's implementation composes them. In a multi-level design (`defer:` participants), this convention spans `.puml` files: each child's interface is locked by the parent's call signatures (validated by the host's `contractHash`), and host tools build the tree bottom-up so an orchestrator is built only after its leaves' real implementations exist.
 
 ### Test Outputs
 
@@ -318,7 +323,7 @@ When `--plan` is absent, the pipeline runs normally and produces Steps 1–8 nar
 
 ### Step 1: Validate Design
 
-The input set contains at least one `.puml` (UML sequence diagram) and may also contain one or more `decision_table_file`s (`<Participant>.decision.md`).
+The input set contains at least one `.puml` (UML sequence diagram) and may also contain one or more `decision_table_file`s (`<Participant>.decision.md`). The plugin reads decision-table files **from the same folder as the `.puml` being processed** — not from a project-wide `design/` root. This lets nested designs (a parent `.puml` with sibling-folder children) keep their decision tables locally scoped to their level of the call tree.
 
 **For each `.puml`:** parse the diagram. For each element, confirm it matches a concept defined in the Concepts section above:
 
@@ -358,6 +363,9 @@ Refuse when:
 - A `participant_target` stereotype is malformed: empty FQN (`<<@class:>>`), FQN that does not match the `language_profile`'s package convention, or a `+method` listed in an `extend:` form whose name does not appear as a `call_arrow` callee method on this participant in any UML in the input set.
 - A participant declared with `participant_target = existing:<fqn>` has any outgoing `call_arrow`. Reuse-as-is means no behavioural change; if the design needs to call methods on this participant, the participant must be a different role (typically `extend:`) or the design must be restructured.
 - A `+method` listed in an `extend:<fqn>:+method,...` does not appear as a `call_arrow` callee on this participant. Every listed method must be exercised by the design.
+- A participant declared with `participant_target = defer:<path>` is the target of the entry interaction. Its own `.puml` defines that — refuse, and direct the human to invoke DisC on the child `.puml` instead.
+- A participant declared with `participant_target = defer:<path>` has any outgoing `call_arrow` in this diagram. Deferral means the internals are designed elsewhere; declaring them here is a contradiction.
+- A participant declares more than one `participant_target` stereotype (e.g., both `<<@class:fqn>>` and `<<defer-design>>`). Pick exactly one form. The four forms (`create`, `existing:`, `extend:`, `defer:`) are mutually exclusive.
 
 ### Step 2: Classify Participants
 
@@ -381,8 +389,9 @@ Identify which concepts apply:
 - `create` (no stereotype, or explicit `create`) — the default; DisC will generate this participant's interface, implementation, and test in Step 3 onwards.
 - `existing:<fqn>` — DisC will not generate files; the participant is referenced only as a `collaborator`.
 - `extend:<fqn>:+method1,+method2,...` — DisC will open the existing files at `<fqn>` in UPDATE mode and add the listed `+method` signatures.
+- `defer:<relative_puml_path>` — DisC will generate the interface and a throwing stub-implementation (per the `language_profile`), but no test class and no decision table. The actual implementation comes from a later DisC run on the child `.puml` at the given path.
 
-Refusals for malformed stereotypes, `existing` participants with outgoing arrows, and unmatched `+method` lists belong to Step 1 — by this point they have already been ruled out.
+Refusals for malformed stereotypes, `existing` or `defer` participants with outgoing arrows, entry-interaction targets that are deferred, multiple stereotypes on one participant, and unmatched `+method` lists belong to Step 1 — by this point they have already been ruled out.
 
 7. Pair each `decision_table_file` with its target `pure function` leaf:
    - Parse the `target: Class.method` frontmatter field.
@@ -421,6 +430,7 @@ For each participant, derive the mode from its declared `participant_target` (re
 - `participant_target = create` → mode is **CREATE** for the participant's interface, implementation, and test. File paths come from the file's `target_placement` + the `language_profile`'s naming and package-placement conventions.
 - `participant_target = existing:<fqn>` → mode is **REUSE**. No interface, implementation, or test is generated for this participant. It is only referenced as a `collaborator` mock and constructor parameter in the `component_under_test`'s test and implementation. The participant's existing signatures are read from source to populate the `@Mock` field types where needed.
 - `participant_target = extend:<fqn>:+method,...` → mode is **UPDATE** for all three files (interface, implementation, test). The FQN parses to the file path per the `language_profile`. Only the listed `+method` signatures and their corresponding test groups are added; everything else in the existing files is sacred.
+- `participant_target = defer:<path>` → mode is **STUB**. CREATE the interface and a throwing stub-implementation (the profile owns the stub template and the `Pending<Name>` naming). **No** test class. **No** decision table — `defer:` participants are not leaves and have no `decision_table_file` paired. The SUT still mocks the participant as a `collaborator` at its own test level (one-hop mocking invariant). The deferred child's own internals are designed and implemented by a future DisC run on `<path>`.
 
 **Fallback for participants with no `participant_target` declared:** glob the conventional file path per the `language_profile`. NEW → **CREATE**, EXISTS → **UPDATE**. This preserves backward compatibility with v0.5.x `.puml` files that predate the stereotype convention.
 
@@ -441,6 +451,7 @@ For each classified element, apply its transformation rule from the Transformati
 | `throw_arrow` | "throw_arrow" | Two `test_group`s with `throw_placement` |
 | `leaf_node` (pure function), no file attached | "leaf_node" | `decision_table` skeleton |
 | `leaf_node` (pure function), `decision_table_file` attached | "leaf_node" | Filled tests, one per row |
+| Participant with `participant_target = defer:<path>` | "STUB mode" | Interface + throwing stub-impl only. No test class. No decision table. |
 
 Use the `language_profile`'s test class template and naming conventions.
 
@@ -458,7 +469,7 @@ Before writing anything, pass every check. Fix generated code if any check fails
 
 2. **Data flow integrity** — Each `data_pipe` connects correctly. Implementation call order matches `verify_test` order. Variable names match `data_mock` names.
 
-3. **File mode correctness** — Step 3 discovery complete. CREATE → Write tool. UPDATE → Edit tool. No existing content modified, moved, or deleted. No duplicate mock fields or test groups.
+3. **File mode correctness** — Step 3 discovery complete. CREATE → Write tool. UPDATE → Edit tool. STUB → Write tool for interface and `Pending<Name>` stub-impl only; no test file. No existing content modified, moved, or deleted. No duplicate mock fields or test groups.
 
 4. **Pattern rules:**
    - Every `collaborator` has a mock field; constructor includes all `collaborator`s and only `collaborator`s
@@ -500,6 +511,10 @@ The implementation is a deterministic function of three inputs: the rows, the `c
 
 Write the implementation using these values. There is no per-run audit log; the rules are fixed by the methodology and the `language_profile`.
 
+**For participants with `participant_target = defer:<path>` (STUB mode):**
+
+The stub-implementation is canonical: every method on the interface throws an `UnsupportedOperationException` whose message names the deferred participant and the expected sub-design path. The exact template (annotation, naming, message string) is owned by the `language_profile`. The stub compiles and lets Spring wire the SUT's `@Autowired` dependency; only actual execution of the deferred behaviour fails, at runtime, with a clear DisC-tagged message that CI can grep for to block production deploys.
+
 ### Step 7: Write Files
 
 **CREATE mode:** Write tool — complete file.
@@ -519,9 +534,10 @@ Entry interaction: present (caller = system_caller, target = <SUT>.<method>)
 Interactions:    [E] entry + [N] collaborator = [total]
 Orchestrators:   [N] participants with outgoing arrows
 Leaf nodes:      [M] total ([P] pure function, [S] side effect, [F] factory)
+Deferred:        [D] participants stubbed; child .puml paths: [paths]
 Decision tables: [K] filled from decision_table_file, [Q] skeletons for humans to fill
 Tests:           [N] verify_tests + [R] result_tests = [total] total
-Files:           [CREATE/UPDATE labels per file]
+Files:           [CREATE/UPDATE/STUB labels per file]
 ```
 
 **Human verification checklist:**

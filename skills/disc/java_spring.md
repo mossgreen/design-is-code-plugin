@@ -133,6 +133,88 @@ Step 3 outcomes per participant:
 
 ---
 
+## PlantUML notation for `defer-design`
+
+A `defer-design` stereotype marks a participant whose internals have not yet been designed; design them later in their own `.puml`. The SUT mocks this participant as a `collaborator` (one-hop mocking), and DisC emits an interface + a throwing stub-impl so the Spring application context still wires.
+
+```plantuml
+@startuml
+' @package com.example.sale
+participant SaleService
+participant DiscountCalculator <<defer-design:CreateSale/DiscountCalculator.puml>>
+participant OwnerRepository    <<@class:com.example.owner.OwnerRepository>>
+
+[*] -> SaleService : createSale(saleRequest)
+SaleService -> OwnerRepository : findById(ownerId)
+SaleService <-- OwnerRepository : owner
+SaleService -> DiscountCalculator : apply(saleRequest)
+SaleService <-- DiscountCalculator : discountedAmount : Money
+[*] <-- SaleService : saleResponse : SaleResponse
+@enduml
+```
+
+### Stereotype grammar
+
+- **`<<defer-design>>`** — abstract `defer:<default-path>`. Path defaults to a sibling folder named after the parent `.puml`'s stem: e.g., for `CreateSale.puml` and a deferred participant `DiscountCalculator`, the default path is `CreateSale/DiscountCalculator.puml`.
+- **`<<defer-design:relative/path/Child.puml>>`** — abstract `defer:relative/path/Child.puml`. Explicit path, relative to the current `.puml`'s folder.
+
+Single-line invariant: the stereotype lives on the same line as the `participant` keyword, just like `<<@class:fqn>>`.
+
+### Generated files in STUB mode
+
+For a participant declared `<<defer-design>>`, DisC generates **two files** under the file's `target_placement` (per the standard package-placement rules below):
+
+1. `<Name>.java` — the interface, with method signatures derived from the `call_arrow`s the SUT makes on this participant. Same shape as a CREATE-mode interface.
+2. `Pending<Name>.java` — a `@Component`-annotated throwing implementation (see *Stub Implementation Template* below).
+
+DisC does **not** generate:
+- A test class for this participant. Its tests will be generated when DisC is run on the child `.puml`.
+- A decision table file. `defer-design` participants are not `leaf_node`s.
+
+### Worked example: STUB mode
+
+For the diagram above, Step 3 produces:
+
+| Participant         | `participant_target`                              | Mode  | Generated files |
+|---------------------|---------------------------------------------------|-------|---|
+| `SaleService`       | (no stereotype → `create`)                        | CREATE| `SaleService.java`, `DefaultSaleService.java`, `DefaultSaleServiceTest.java` |
+| `OwnerRepository`   | `existing:com.example.owner.OwnerRepository`      | REUSE | none |
+| `DiscountCalculator`| `defer:CreateSale/DiscountCalculator.puml`        | STUB  | `DiscountCalculator.java`, `PendingDiscountCalculator.java` (no test class) |
+
+The SUT's test `DefaultSaleServiceTest` still mocks `DiscountCalculator` as a `@Mock` `collaborator` with `verify(discountCalculator).apply(saleRequest)` — one-hop mocking. The deferred child's own implementation comes from a later DisC run on `CreateSale/DiscountCalculator.puml`.
+
+### Stub Implementation Template
+
+```java
+package {basePackage}.[package];
+
+import org.springframework.stereotype.Component;
+
+@Component
+public class Pending[Name] implements [Name] {
+
+    @Override
+    public [ReturnType] [method]([ParamType] [param]) {
+        throw new UnsupportedOperationException(
+            "DisC: design pending for [Name] — design at [relativePathFromProjectRoot]");
+    }
+    // ...one method per call_arrow on this participant, all throwing
+}
+```
+
+Conventions:
+
+- **Annotation:** `@Component`, not `@Service`. `@Service` would imply a real implementation; `@Component` reads as "infrastructure-level placeholder Spring bean".
+- **Naming:** `Pending` + interface name. Distinguishes the stub from any future `Default<Name>` that the child `.puml` will produce.
+- **Marker string:** the literal substring `DisC: design pending for <Name> — design at <path>` MUST appear in every `UnsupportedOperationException` message. CI greps for `DisC: design pending` to block production deploys.
+- **Method bodies:** one per `call_arrow` the SUT makes on this participant. Method signatures match the SUT's call shape.
+
+### Compatibility with other stereotypes
+
+`<<defer-design>>` is mutually exclusive with `<<@class:fqn>>` and `<<@class:fqn, +method>>`. Step 1 refuses any participant declaring more than one form. The four `participant_target` values (`create`, `existing:`, `extend:`, `defer:`) form a single dimension; pick exactly one per participant.
+
+---
+
 ## Naming Conventions
 
 By default, the participant name is the interface name. 
@@ -149,6 +231,7 @@ If no implementation name is defined, use `Default` + interface name.
 | Mock field (data) | Variable name from return label. Type from explicit `: Type` or PascalCase inference | `savedOrder : Order` → field: `Order savedOrder` |
 | Method-under-test name | Method name from the entry interaction's label | `createSale` ← `[*] -> SaleService : createSale(saleRequest)` |
 | Method-under-test parameters | Argument names from the entry interaction's label, types resolved via the Domain Type Rule | `saleRequest` → `@Mock private CreateSaleRequest saleRequest` |
+| STUB-mode implementation (defer-design) | `Pending` + interface name | `PendingDiscountCalculator` ← `DiscountCalculator` |
 
 The interface name will be referenced as "InterfaceName"
 the implementation name will be referenced as "ImplementationName"

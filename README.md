@@ -106,6 +106,33 @@ See [`skills/disc/java_spring.md`](skills/disc/java_spring.md#plantuml-notation-
 
 Append `--plan` to the command (`/design-is-code:disc design/foo.puml --plan`) to run the pipeline in dry-run mode. DisC emits a single JSON envelope of file actions to stdout without writing anything. Designed for host tools like DisC Studio to render a preview panel before the user commits to a real run.
 
+### Multi-level designs (`<<defer-design>>`)
+
+Real systems often have orchestrators that call other orchestrators. DisC handles this by **top-down design + bottom-up implementation**: each level of the call tree is its own `.puml`, and the bottom level is implemented first.
+
+When a participant in the parent diagram is itself an orchestrator (will need its own `.puml`), declare it `<<defer-design>>`:
+
+```plantuml
+participant DiscountCalculator <<defer-design:CreateSale/DiscountCalculator.puml>>
+```
+
+For this run, DisC emits the interface and a throwing stub-impl named `PendingDiscountCalculator` (annotated `@Component`, every method throws `UnsupportedOperationException` with a `DisC: design pending` marker). The SUT's test still mocks `DiscountCalculator` as a `collaborator` — one-hop mocking. The deferred child's real implementation comes from a later DisC run on the child `.puml`.
+
+Folder layout:
+
+```
+design/05_sale/
+  CreateSale.puml                   ← parent
+  CreateSale/
+    DiscountCalculator.puml         ← child sub-design, real impl when DisC runs on this file
+```
+
+The build order is bottom-up: DisC Studio's "Build all" walks the tree leaves-first, so by the time the parent `.puml` is processed its child's `Pending<Name>` stub has been replaced with the real implementation produced by the child's own DisC run. Interfaces flow the other way — the parent's `call_arrow` on the child pins the child's signature, locked by the host's `contractHash` and refused as stale if the parent changes.
+
+The child `.puml`'s `[*] -> DiscountCalculator: apply(...)` entry interaction must match the parent's call signature on `DiscountCalculator`. (DisC Studio computes this signature hash automatically and refuses to build a child whose parent contract has drifted.)
+
+Decision tables (`<Participant>.decision.md`) live in the same folder as the `.puml` that uses them — DisC reads them as siblings, not from a project-wide `design/` root.
+
 ## Keep the Plugin Up to Date
 
 Third-party marketplaces have auto-update disabled by default. To manually pull the latest version:

@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-05-19
+
+### Added
+- Fourth `participant_target` form: `defer:<path>`. Declared in PlantUML as `<<defer-design>>` (default sibling-folder path) or `<<defer-design:relative/path/Child.puml>>` (explicit). Marks a participant whose internals will be designed in a separate `.puml` later. Enables top-down design + bottom-up implementation across multi-level designs.
+- STUB generation mode in Step 3f: emits the interface plus a throwing `@Component` stub (`Pending<Name>`) for `defer:` participants. No test class, no decision table — those come when DisC is run on the child `.puml`. Stub-impl throws `UnsupportedOperationException` with a `DisC: design pending` marker string that CI can grep to block production deploys.
+- One-hop mocking invariant in SKILL.md: a `collaborator`'s own dependencies (grandchildren) never bubble up to the SUT's test. The SUT mocks each direct child as a unit regardless of its `participant_target`. Makes the boundary between parent and child designs explicit.
+- Step 1 refusal cases for `defer:` participants: cannot be the entry interaction's target, cannot have outgoing `call_arrow`s in this diagram, mutually exclusive with `<<@class:fqn>>` on the same participant.
+- Clarification in Step 1: decision-table files (`<Participant>.decision.md`) are read from the **same folder as the `.puml` being processed**, not from a project-wide `design/` root. Lets nested designs scope their decision tables to their level of the call tree.
+- Stub Implementation Template in `java_spring.md` (`Pending<Name>` naming, `@Component` annotation, mandatory marker string).
+- Step 8 report shape: new `Deferred:` line listing the count and child paths; new `STUB` label in the Files line.
+
+### Changed
+- `participant_target` concept in SKILL.md now lists four mutually-exclusive forms (`create`, `existing:`, `extend:`, `defer:`) instead of three.
+- Step 2.6.5, Step 3f, Step 4 transformation table, Step 5 checks, and Step 6 implementation generation all updated to handle STUB mode.
+
 ## [0.6.0] - 2026-05-19
 
 ### Added
