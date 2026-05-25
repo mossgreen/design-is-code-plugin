@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-05-24
+
+### Added
+- `entity_declaration` and `entity_prelude` concepts in SKILL.md: domain types (records, enums, classes, interfaces, sealed-interfaces) that the participants pass through `data_pipe`s, declared in a prelude block immediately after the `' @package` header. A parallel taxonomy to `participant` — entities are *data* nodes (never mocked at the SUT level, never appear in any constructor as a `collaborator`); participants are *behavioral* nodes.
+- `entity_target` concept: per-entity analog of `participant_target`. Two forms in v0.8.0 — `create` (default, generate the file) and `existing:<fqn>` via `<<@class:fqn>>` (REUSE; read the existing source for its shape, generate no file). `extend` and `defer` do not apply to entities in v0.8.0.
+- `sealed_family` concept: a `sealed-interface` entity paired with `<<@permits:V1,V2,...>>`. Hosts sealed-polymorphism variance — each permit owns its override of the parent's behaviors. Step 1 refuses families with fewer than 2 permits.
+- `variant_decision_table` concept: a `decision_table_file` whose `target: Variant.method` resolves to a permit record's override (distinct from the existing pairing rule that targets a `pure function` leaf participant). When attached, the variant's override body is filled from rows; absent, the override is generated in skeleton mode.
+- PlantUML notation in `java_spring.md` for `entity_declaration`: `class Name <<record>>`, `<<enum>>`, `<<class>>`, `<<interface>>`, `<<sealed-interface>>` with body fields/values/behaviors. REUSE form `<<@class:fqn>>` (no body). Sealed families use `<<@permits:V1,V2>>` as a second stereotype on the same line as `<<sealed-interface>>`.
+- New SKILL.md Step 2.8: parse the `entity_prelude`, build the entities map, cross-reference type tokens used in method signatures, pair `variant_decision_table`s.
+- New SKILL.md Step 3g: set mode per entity from `entity_target` (CREATE for declared, REUSE source-read for `existing:<fqn>`).
+- New SKILL.md Step 4 transformation rows for `entity_declaration` (create/existing) and `sealed_family` permits (filled or skeleton override body).
+- Two new SKILL.md Step 5 checks: type resolution (every type token resolves when an `entity_prelude` is present) and sealed-family override completeness (every permit produces an override for every parent behavior).
+- `java_spring.md` Entity Generation Templates section: per-kind Java output, file paths, sealed-family + permit handling, per-variant impl mode (skeleton vs filled), variant pairing rule.
+- Sealed-poly variance is now first-class: adding a new variant to a `sealed_family` requires only a new `record` entity + an entry in the parent's `<<@permits:…>>` stereotype — no orchestrator, participant, or method-signature edits.
+- Variant marker convention: skeleton-mode permit overrides throw `UnsupportedOperationException` with the literal `DisC: variant impl pending for <Parent>.<method> on <Variant>` — parallel to the `defer-design` marker. CI greppable to block production deploys.
+- Step 8 report shape: new `Entities:` line listing kind counts; new `Sealed-family variants:` line listing filled vs skeleton permit overrides.
+
+### Changed
+- SKILL.md Step 5 grew from four to six critical checks (Type resolution + Sealed-family override completeness added).
+- SKILL.md Step 4 generation order now begins with declared entities (parents before permits), then falls back to inferred domain types when no `entity_prelude` is present.
+- SKILL.md Concepts reorganized: `Entity declarations` subsection renamed to `Entity elements` and slimmed to its primitives (`entity_declaration`, `entity_prelude`). `entity_target` and `sealed_family` moved to the **Composition** section next to `participant_target` / `data_pipe` (where the parallel/derived-fact lives). `variant_decision_table` moved to the **Decision-table elements** subsection next to `decision_table_file` (where line 58's forward-reference points).
+- SKILL.md `participant` definition (Concepts) closed a v0.6.0/v0.7.0 gap: now acknowledges that `participant_target` stereotypes override the name→class mapping, and forward-references `entity_declaration` as the data-side parallel.
+- SKILL.md `decision_table_file` description corrected to match Step 1's authoritative rule: tables sit as siblings of the `.puml` that uses them, not under a project-wide `design/` root.
+- SKILL.md Step 1 refusal list grouped into four named categories (UML structure / decision-table well-formedness / participant stereotype / entity prelude) for scanability; bullet content unchanged.
+- SKILL.md Plan-mode JSON example abstracted (`OwnerRepository.findById` → `<CollaboratorName>.<methodName>`) to match the prompt-wide example-agnostic convention.
+
+### Refused (Step 1)
+- `sealed-interface` entity with fewer than 2 permits.
+- A permit name that does not resolve to a `record` or `class` `entity_declaration` in the same prelude.
+- An entity kind not in the allowed set.
+- A REUSE entity declared with body content (REUSE = FQN binding only).
+- A REUSE `sealed_family` whose declared permits don't match the existing source's `permits` clause exactly. (Refusal message directs the user to declare the parent as `create`, or wait for v0.9 UPDATE-entity support via `<<@class:fqn, +permit:Name>>`.)
+- A method signature referencing a type that doesn't resolve to entity/participant/primitive/JDK/boundary-carrier (only when an `entity_prelude` is present — absent prelude triggers signature inference).
+- A `variant_decision_table` whose target permit doesn't implement the sealed parent, or names a behavior that doesn't exist on the parent.
+- A permit name that collides with a participant name in the same input set.
+
+### Backward compatibility
+- When the `' @disc-entities` marker is absent, Step 2.8 short-circuits and the existing signature-inference path runs unchanged. All 9 demo `.puml` files in `design-is-code-demo` continue to generate identical output as v0.7.0.
+
+### Deferred to v0.9
+- UPDATE-entity support: extending a REUSE `record` with `+field:name:Type` or a REUSE `sealed-interface` with `+permit:Name`. Mirrors the existing participant `<<@class:fqn, +method>>` syntax.
+- Pattern-match-host participant stereotype `<<pattern-match: targetEntity>>` for pure-sum sealed families (empty `behaviors[]`) where a participant's method body switches over the variants.
+
 ## [0.7.0] - 2026-05-19
 
 ### Added

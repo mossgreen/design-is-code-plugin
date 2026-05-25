@@ -133,6 +133,64 @@ Step 3 outcomes per participant:
 
 ---
 
+## PlantUML notation for `entity_declaration`
+
+Entities are declared in an `entity_prelude` immediately after the `' @package` header and before the participant prelude. The prelude block is preceded by the marker `' @disc-entities`. Each `entity_declaration` is one PlantUML `class` line with a kind stereotype and an optional body. The five kinds are `record`, `enum`, `class`, `interface`, `sealed-interface`. The REUSE form `<<@class:fqn>>` carries no body.
+
+```plantuml
+@startuml
+' @package com.example.consumer
+' @disc-entities type declarations the participants pass around
+class Parent <<sealed-interface>> <<@permits:V1,V2>> {
+  + behave(input: int): String
+}
+class V1 <<record>> {
+  + id: String
+}
+class V2 <<record>> {
+  + id: String
+}
+class Kind <<enum>> {
+  + KIND_A
+  + KIND_B
+}
+
+' @disc-classification CREATE (no stereotype), REUSE (@class), UPDATE (@class + +methods)
+participant ConsumerService
+[*] -> ConsumerService : doWork(payload, input)
+ConsumerService -> Parent : behave(input)
+ConsumerService <-- Parent : result : String
+[*] <-- ConsumerService : result : String
+@enduml
+```
+
+### Kind stereotype grammar
+
+- **`<<record>>`** — Java record. Body lists fields: `+ fieldName: Type` per line. Becomes `public record Name(Type fieldName, ...)`.
+- **`<<enum>>`** — Java enum. Body lists values: `+ VALUE_NAME` per line.
+- **`<<class>>`** — mutable POJO. Body lists fields like `record`. Becomes a class with private fields, a no-arg constructor, getters, and setters. Use sparingly; prefer `record`.
+- **`<<interface>>`** — plain contract type (not a participant). Body lists behaviors: `+ method(arg: Type, ...): ReturnType`.
+- **`<<sealed-interface>>`** — sealed contract type. Body lists behaviors (may be empty for pure sum types). **MUST** be paired on the same line with `<<@permits:V1,V2,...>>` listing 2+ variant names. Each permit must resolve to a `record` or `class` `entity_declaration` in the same prelude.
+
+### REUSE form
+
+- **`<<@class:fqn>>`** on an entity = `entity_target = existing:<fqn>`. No file is generated. The plugin reads the existing source to capture the entity's shape (fields, permits) for downstream codegen. **Declaring body content on a REUSE entity refuses at Step 1** — REUSE is FQN binding only.
+- A REUSE `sealed-interface` may include `<<@permits:V1,V2>>` for human readability of the design, but the listed permits MUST match the existing source's `permits` clause exactly; mismatch refuses at Step 1.
+
+### Permits stereotype
+
+- `<<@permits:V1,V2>>` — comma-separated, no spaces required between names. Lives on the same line as `<<sealed-interface>>`. Each name must appear as another `entity_declaration` of kind `record` or `class` in the same prelude.
+
+### When the prelude is absent
+
+Hand-written `.puml` files predating v0.8.0 carry no `' @disc-entities` marker. Step 2.8 short-circuits to no-op; every type token referenced in a method signature that does not match a `participant` is generated as a plain class under `{basePackage}.entity` (the v0.5.x signature-inference path). This is preserved for backward compatibility with the demo corpus.
+
+### Where the prelude sits
+
+Between the `' @package` header (line 1 after `@startuml`) and the participant prelude (`' @disc-classification ...`). Entity declarations live above participant declarations because data flows are upstream of the behaviors that exchange them.
+
+---
+
 ## PlantUML notation for `defer-design`
 
 A `defer-design` stereotype marks a participant whose internals have not yet been designed; design them later in their own `.puml`. The SUT mocks this participant as a `collaborator` (one-hop mocking), and DisC emits an interface + a throwing stub-impl so the Spring application context still wires.
@@ -248,6 +306,7 @@ the implementation name will be referenced as "ImplementationName"
 | `*Builder` | `{basePackage}.builder` | `SaleBuilder.java` |
 | `*Controller` | `{basePackage}.controller` | `OrderController.java` |
 | Entity/model types | `{basePackage}.entity` or `{basePackage}.model` | `Order.java` |
+| `sealed-interface` family parent + all its permits | `{basePackage}.entity` (parent and permits share one package) | `Parent.java`, `V1.java`, `V2.java` |
 | `*Request`, `*Response`, `*DTO` | `{basePackage}.model` | `CreateOrderRequest.java` |
 | Test classes | Same package as implementation, under `src/test/java` | `DefaultOrderServiceTest.java` |
 
@@ -411,6 +470,128 @@ Mapping from the entry interaction:
 | Domain type (EXISTS) | Nothing — skip | Everything |
 
 For participants with `participant_target = extend:<fqn>:+method1,+method2,...`, UPDATE mode applies to all three files (interface, implementation, test) for that participant. The rules above govern *what* is added: only the listed `+method` signatures, their corresponding method bodies, and one `@Nested` class per `+method` in the test. Methods that already exist on the participant in the source are read for type information (to populate `@Mock` types in dependent tests) but are not re-emitted.
+
+---
+
+## Entity Generation Templates
+
+For each `entity_declaration` in the `entity_prelude` whose `entity_target = create`, generate the file below under the entity's package (typically `{basePackage}.entity`). REUSE entities (`entity_target = existing:<fqn>`) emit no file; the plugin reads the existing source to capture the entity's shape for downstream codegen.
+
+| Kind | Java output | Path |
+|---|---|---|
+| `record` | `public record V1(String id) {}` (when this record is a permit of a `sealed_family`, append `implements <Parent>` and one `@Override` body per parent behavior — see *Per-variant impl mode* below) | `src/main/java/{basePackagePath}/entity/V1.java` |
+| `enum` | `public enum Kind { KIND_A, KIND_B }` | `src/main/java/{basePackagePath}/entity/Kind.java` |
+| `class` | mutable POJO: private fields + no-arg constructor + getters/setters | `src/main/java/{basePackagePath}/entity/Foo.java` |
+| `interface` | `public interface Foo { <behaviors...> }` | `src/main/java/{basePackagePath}/entity/Foo.java` |
+| `sealed-interface` | `public sealed interface Parent permits V1, V2 { String behave(int input); }` — abstract behaviors only; the parent has no implementation body and no test class. Permits resolve without imports because they share the package (see Package Placement). | `src/main/java/{basePackagePath}/entity/Parent.java` |
+
+### Record fields and behavior overrides
+
+For a `record` entity that is **not** a sealed-family permit, the file is the bare record with its declared fields:
+
+```java
+package com.example.consumer.entity;
+
+public record V1(String id) {}
+```
+
+For a `record` entity that **is** a sealed-family permit, append the `implements <Parent>` clause and one `@Override` body per parent behavior. The body mode is determined per Per-variant impl mode below.
+
+### Per-variant impl mode
+
+Each `sealed_family` permit owns one method body per parent behavior. The body source is decided by Step 2.8's `variant_decision_table` pairing.
+
+**Skeleton mode** (no `variant_decision_table` paired):
+
+```java
+package com.example.consumer.entity;
+
+public record V2(String id) implements Parent {
+    @Override
+    public String behave(int input) {
+        throw new UnsupportedOperationException(
+            "DisC: variant impl pending for Parent.behave on V2 — add design/.../V2.decision.md");
+    }
+}
+```
+
+Accompanies a skeleton test at `src/test/java/{basePackagePath}/entity/V2Test.java` with one `@Test` placeholder per parent behavior:
+
+```java
+class V2Test {
+    @Test
+    void shouldBehave() {
+        // TODO: Human — fill in expected behavior, or create design/.../V2.decision.md.
+    }
+}
+```
+
+**Filled mode** (`<V1>.decision.md` paired with `target: <V1>.<behavior>`):
+
+The override body is generated from the decision-table rows using the existing filled-mode rules (see the *Decision Table* section below — same row semantics, `required_decision` checking, exception rows, etc.). The output lands in the permit's `@Override` body rather than in a standalone `Default<Name>.java`:
+
+```java
+package com.example.consumer.entity;
+
+public record V1(String id) implements Parent {
+    @Override
+    public String behave(int input) {
+        if (input <= 0) {
+            throw new IllegalArgumentException("input must be positive");
+        }
+        return "v1:" + input;
+    }
+}
+```
+
+Accompanying test at `src/test/java/{basePackagePath}/entity/V1Test.java` is fully filled, one `@Test` per row, using real `V1` record instances (no mocks — records are final by Java's rules):
+
+```java
+class V1Test {
+    @Test
+    void shouldBehaveOnPositiveInput() {
+        V1 v1 = new V1("any");
+        assertThat(v1.behave(5)).isEqualTo("v1:5");
+    }
+    // ...one @Test per row
+}
+```
+
+**Marker string convention.** Skeleton-mode variant throws use the literal substring `DisC: variant impl pending for <Parent>.<method> on <Variant>` — parallel to the `defer-design` marker `DisC: design pending for ...`. CI can grep for `DisC: variant impl pending` to block production deploys with unfilled variants.
+
+### Variant pairing rule (for `variant_decision_table`)
+
+Frontmatter:
+
+```yaml
+---
+target: V1.behave
+package: com.example.consumer
+input:
+  input: int
+output: String
+config:
+  exceptionType: java.lang.IllegalArgumentException
+---
+
+| input | expected                          |
+|-------|-----------------------------------|
+| 5     | "v1:5"                            |
+| 0     | throws: IllegalArgumentException  |
+```
+
+Pairing rule (executed in SKILL.md Step 2.8):
+
+1. Parse `target: Variant.method`.
+2. Look up `Variant` in the entities map. Must be a permit of some `sealed_family`.
+3. Look up `.method` on the parent sealed interface's behaviors. Must exist.
+4. Pair the table with that permit's override of that method; mark filled.
+
+The frontmatter's `input:` declares the signature against which row cells type-check; `output:` declares the override's return type (or the parent behavior's return type if richer than primitive). Per-variant tests construct real variant instances (with arbitrary values for any record fields not exercised by the behavior — Java records are pure data, easy to instantiate).
+
+### REUSE sealed-family caveat
+
+A REUSE `sealed-interface` (`<<@class:fqn>>` with `<<@permits:V1,V2>>`) refuses any permit addition in v0.8.0. The plugin reads the existing source's permits clause; the design's permits MUST match exactly. To add a new permit to an existing sealed Java type, declare the parent as `create` in the design (not REUSE), or wait for v0.9 UPDATE-entity support (`<<@class:fqn, +permit:<Variant>>>`).
 
 ---
 
