@@ -81,7 +81,7 @@ participant DiscountRepository  <<@class:com.example.sale.DiscountRepository, +f
 
 - **`<<@class:fqn>>`** — abstract `existing:<fqn>`. Participant is reused from the type at `<fqn>`. DisC generates no files for it.
 - **`<<@class:fqn, +method1, +method2>>`** — abstract `extend:<fqn>:+method1,+method2`. Participant exists at `<fqn>` but the design adds the listed methods. Each `+method` must match a `call_arrow` callee method on this participant in the diagram.
-- **Absence of stereotype** — implicit `create`. The default for greenfield design and the prior behaviour for all v0.5.x `.puml` files.
+- **Absence of stereotype** — implicit `create`. The default for greenfield design.
 
 ### FQN form
 
@@ -183,7 +183,7 @@ ConsumerService <-- Parent : result : String
 
 ### When the prelude is absent
 
-Hand-written `.puml` files predating v0.8.0 carry no `' @disc-entities` marker. Step 2.8 short-circuits to no-op; every type token referenced in a method signature that does not match a `participant` is generated as a plain class under `{basePackage}.entity` (the v0.5.x signature-inference path). This is preserved for backward compatibility with the demo corpus.
+When `.puml` files carry no `' @disc-entities` marker, Step 2.8 short-circuits to no-op; every type token referenced in a method signature that does not match a `participant` is generated as a plain class under `{basePackage}.entity` (signature-inference path).
 
 ### Where the prelude sits
 
@@ -591,7 +591,7 @@ The frontmatter's `input:` declares the signature against which row cells type-c
 
 ### REUSE sealed-family caveat
 
-A REUSE `sealed-interface` (`<<@class:fqn>>` with `<<@permits:V1,V2>>`) refuses any permit addition in v0.8.0. The plugin reads the existing source's permits clause; the design's permits MUST match exactly. To add a new permit to an existing sealed Java type, declare the parent as `create` in the design (not REUSE), or wait for v0.9 UPDATE-entity support (`<<@class:fqn, +permit:<Variant>>>`).
+A REUSE `sealed-interface` (`<<@class:fqn>>` with `<<@permits:V1,V2>>`) refuses any permit addition. The plugin reads the existing source's permits clause; the design's permits MUST match exactly. To add a new permit to an existing sealed Java type, declare the parent as `create` in the design (not REUSE).
 
 ---
 

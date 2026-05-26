@@ -6,3 +6,6 @@
 
 # Claude Code (local workspace, never shared)
 .claude/
+
+# Tool lockfiles (local PID locks, never shared)
+.in_use/

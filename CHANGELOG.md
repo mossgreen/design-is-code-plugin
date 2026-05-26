@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-05-26
+
+### Changed
+- SKILL.md is now strictly language-agnostic. Dependency inversion applied — the methodology no longer names any specific language, framework, or diagram notation. Specifically: (1) Step 1's refusal list dropped language-specific checks (compiler catches them) or relocated them to their point of consumption (Step 3g for REUSE permits-clause mismatch, Step 5 for type resolution). Step 1 now refuses only on design-integrity violations that hold for any `language_profile`. (2) Every `(e.g., PlantUML…)` / `(e.g., java_spring.md…)` parenthetical removed; concept definitions and pipeline prose delegate to `the language_profile` without naming concrete forms. (3) Java/Spring tokens (`JDK type`, `@Override`, `@Mock`, `@Autowired`, `UnsupportedOperationException`, `assertThatThrownBy`, `implements <Parent>`, `sealed interface … permits …`, `.java` paths) replaced with abstract phrasing the profile already templates.
+- Both methodology documents (SKILL.md and `java_spring.md`) carry zero version-number references. Forward-looking version mentions (`in v0.8.0`, `wait for v0.9 UPDATE-entity support`) and backward-history clauses (`the v0.5.x signature-inference path`, `predating v0.8.0`, `backward compatibility with the demo corpus`, `legacy`, `for now`) are removed. Operational rules are preserved in full — the no-op behaviour when `' @disc-entities` is absent, the REUSE permits-clause refusal mechanism, and the implicit `create` default all remain. Rationale: methodology docs are loaded as AI prompt context; version anchors rot immediately and invite reading the contract as a changelog instead of a self-contained spec. Changelogs belong in CHANGELOG.md.
+
 ## [0.8.0] - 2026-05-24
 
 ### Added

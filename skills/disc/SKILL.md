@@ -43,9 +43,9 @@ What the human authors. The first artifacts in the chain.
 
 - **`branch_block`** — An `alt` / `else` / `end` fragment with multiple paths.
 
-- **`throw_arrow`** — A self-arrow (from a `participant` to itself) labeled `<<throws>> ExceptionType`.
+- **`throw_arrow`** — A self-arrow (from a `participant` to itself) tagged as a throw declaration.
 
-- **`system_caller`** — The fixed boundary marker for the entry into the system under test. Stands in for the test harness in DisC tests and for the framework (HTTP, message queue, scheduled trigger) in production. It is **not** a `participant`: it has no abstraction, no implementation, no class to generate, and it is never instantiated, mocked, or placed in a constructor. It exists in the design only to be the caller of the **entry interaction** (and, optionally, the callee of the final return). Exactly one `system_caller` per diagram. The notation used to write the `system_caller` is owned by the `language_profile` (e.g., PlantUML writes it as `[*]`).
+- **`system_caller`** — The fixed boundary marker for the entry into the system under test. Stands in for the test harness in DisC tests and for the framework (HTTP, message queue, scheduled trigger) in production. It is **not** a `participant`: it has no abstraction, no implementation, no class to generate, and it is never instantiated, mocked, or placed in a constructor. It exists in the design only to be the caller of the **entry interaction** (and, optionally, the callee of the final return). Exactly one `system_caller` per diagram. The notation used to write the `system_caller` is owned by the `language_profile`.
 
 **Distinguishing `call_arrow` from `return_arrow`** — when arrow styles are identical, use three signals:
 
@@ -63,9 +63,9 @@ What the human authors. The first artifacts in the chain.
 
 A parallel taxonomy to `participant`. Entities are **data** nodes (passed through `data_pipe`s); participants are **behavioral** nodes (called via `call_arrow`s). Entities are never mocked at the SUT level and never appear in any constructor as a `collaborator` — they show up in tests only as `data_mock`s the orchestrator passes between collaborator interactions.
 
-- **`entity_declaration`** — A line in the `.puml` prelude declaring a domain type the participants pass through `data_pipe`s. Five kinds, one form per line: `record`, `enum`, `class`, `interface`, `sealed-interface`. The syntactic form is owned by the `language_profile` (e.g., PlantUML writes it as `class Name <<kind>>` with optional `{ ... }` body).
+- **`entity_declaration`** — A line in the `.puml` prelude declaring a domain type the participants pass through `data_pipe`s. Five kinds, one form per line: `record`, `enum`, `class`, `interface`, `sealed-interface`. The syntactic form is owned by the `language_profile`.
 
-- **`entity_prelude`** — The block of `entity_declaration`s between the `target_placement` header and the participant prelude, preceded by a marker the `language_profile` defines. **Optional** — when absent, every type referenced in a method signature that is neither primitive/JDK nor a participant is generated as a plain class under the language profile's entity package (the v0.5.x signature-inference behaviour). When present, declared entities win over inferred ones for the same name.
+- **`entity_prelude`** — The block of `entity_declaration`s between the `target_placement` header and the participant prelude, preceded by a marker the `language_profile` defines. **Optional** — when absent, every type referenced in a method signature that is neither a `language_profile`-recognised standard type nor a participant is generated as a plain class under the language profile's entity package. When present, declared entities win over inferred ones for the same name.
 
 Per-entity configuration (`entity_target`) and derived/composite entity concepts (`sealed_family`) live in the **Composition** section below, alongside their participant-side counterparts.
 
@@ -103,25 +103,25 @@ Derived facts about the design, computed before tests are generated.
 
 - **`participant_target`** — A declaration on a `participant` that tells DisC whether to CREATE it as a new abstraction, REUSE an existing type as-is, UPDATE an existing type by adding methods, or DEFER its design to a separate `.puml`. Absent by default (meaning `create`). Four mutually-exclusive forms:
 
-  - **`create`** (default when no stereotype is declared on the participant): generate the interface, implementation, and tests for this participant under the file's `target_placement`. This is the behaviour DisC had before `participant_target` existed.
+  - **`create`** (default when no stereotype is declared on the participant): generate the interface, implementation, and tests for this participant under the file's `target_placement`.
   - **`existing:<fqn>`**: this participant is already implemented at the fully-qualified name `<fqn>`. DisC does not generate files for it; it appears only as a `collaborator` mock and constructor parameter. A participant declared as `existing` must have no outgoing `call_arrow`s (REUSE means as-is — no behavioural change).
   - **`extend:<fqn>:+method1,+method2,...`**: this participant exists at `<fqn>` but the design adds the listed methods. DisC opens the existing files (interface, implementation, test) in UPDATE mode and adds only the listed signatures.
   - **`defer:<relative_puml_path>`**: this participant is called by the SUT but its internals have not yet been designed; design them later in their own `.puml` at the given path. DisC generates the interface plus a throwing stub-implementation now, with no test class and no decision table. The actual implementation will come from running DisC on the child `.puml`. Like `existing:`, a `defer:` participant must have no outgoing `call_arrow`s in *this* diagram — its outgoing calls live in its own `.puml`. The path is optional in the stereotype; absent, the profile defaults to a sibling-folder convention (see `language_profile`).
 
-  Exactly one form per participant. The syntactic form of the stereotype is owned by the `language_profile` (e.g., the PlantUML notations `<<@class:fqn>>` and `<<defer-design>>` are defined in `java_spring.md`). The abstract concept defines what each declaration *means*; the profile defines how it *looks* in the diagram.
+  Exactly one form per participant. The syntactic form of the stereotype is owned by the `language_profile`. The abstract concept defines what each declaration *means*; the profile defines how it *looks* in the diagram.
 
   **One-hop mocking invariant.** The SUT's test always mocks its direct `collaborator`s as units, regardless of their `participant_target`. A `collaborator`'s own dependencies (its grandchildren in the call tree) never bubble up to the SUT's test. This is true for `create`, `existing:`, `extend:`, and `defer:` alike — each `collaborator` is one mock at the SUT's level.
 
   **Direction of flow.** DisC is *outside-in* for interfaces and *inside-out* for implementations. A participant's interface is pinned by its callers' `call_arrow`s — the leaf does not author its own contract. Implementation flows the other way: each leaf is implemented from its own tests in isolation, and the orchestrator's implementation composes them. In a multi-level design (`defer:` participants), this convention spans `.puml` files: each child's interface is locked by the parent's call signatures (validated by the host's `contractHash`), and host tools build the tree bottom-up so an orchestrator is built only after its leaves' real implementations exist.
 
-- **`entity_target`** — Per-entity analog of `participant_target`. Two forms in v0.8.0:
+- **`entity_target`** — Per-entity analog of `participant_target`. Two forms:
 
-  - **`create`** (default, no stereotype): generate the entity's Java file under the language profile's entity-package convention.
+  - **`create`** (default, no stereotype): generate the entity's file under the `language_profile`'s entity-package convention.
   - **`existing:<fqn>`**: the entity already exists at `<fqn>`. DisC generates no file; it reads the existing source for its shape (fields for a record, permits for a sealed-interface) so downstream codegen can reference it. A REUSE entity carries the FQN binding only — declaring body content on a REUSE entity refuses at Step 1.
 
-  `extend` and `defer` from `participant_target` do not apply to entities in v0.8.0. Adding fields to a REUSE record, or adding permits to a REUSE sealed-interface, is a v0.9 candidate.
+  `extend` and `defer` from `participant_target` do not apply to entities.
 
-- **`sealed_family`** — A `sealed-interface` `entity_declaration` paired with a `permits` list. Permits each resolve to a `record` or `class` entity in the same `entity_prelude`. Sealed families host **sealed polymorphism** variance: the parent declares one or more behaviors, and each permit produces an override. A sealed family with `< 2` permits refuses at Step 1 (Java's `sealed` modifier is for closed disjoint unions; one permit is a tautology).
+- **`sealed_family`** — A `sealed-interface` `entity_declaration` paired with a `permits` list. Permits each resolve to a `record` or `class` entity in the same `entity_prelude`. Sealed families host **sealed polymorphism** variance: the parent declares one or more behaviors, and each permit produces an override. A sealed family with `< 2` permits refuses at Step 1 (the `sealed-interface` kind models closed disjoint unions; with one permit there is no choice — declare the variant directly as a `record` or `class`).
 
 ### Test Outputs
 
@@ -216,7 +216,7 @@ An `alt` / `else` / `end` fragment with multiple paths transforms as follows:
 
 ### `throw_arrow`
 
-A self-arrow labeled `<<throws>> ExceptionType` produces two `test_group`s governed by the `throw_placement` rule:
+A `throw_arrow` (self-arrow tagged as a throw declaration) produces two `test_group`s governed by the `throw_placement` rule:
 
 **Happy path `test_group`:**
 - `stub`s are configured to avoid the exception condition.
@@ -246,7 +246,7 @@ For `pure function` leaves:
 - Tests use direct assertions on return values. No mocks. No `verify_test`s.
 - Test cases are marked for human review. AI must NOT invent both test cases and implementation.
 - The algorithm is unconstrained — any implementation that passes the `decision_table` is valid.
-- When a `decision_table_file` is attached, each row becomes one test with declared-type arguments and assertions. No TODO markers. Exception rows become `assertThatThrownBy` tests.
+- When a `decision_table_file` is attached, each row becomes one test with declared-type arguments and assertions. No TODO markers. Exception rows become exception-assertion tests (the assertion construct is owned by the `language_profile`).
 
 **Dual testing rule (pure functions only):** In the consumer's test, a `pure function` leaf is still a mocked `collaborator` with `verify_test`s. It also gets its own standalone `decision_table` test. These serve different purposes: the consumer's test verifies orchestration wiring; the `decision_table` verifies computational correctness. `side effect` and `factory` leaves have no standalone DisC test, so dual testing does not apply.
 
@@ -318,7 +318,7 @@ The JSON envelope:
   "actions": [
     {
       "type": "CREATE" | "UPDATE" | "REUSE",
-      "path": "src/main/java/com/foo/X.java",
+      "path": "<language-profile-path>/X.<ext>",
       "participant": "X",
       "reason": "string explanation",
       "addedMethods": ["m1", "m2"]
@@ -342,6 +342,19 @@ The envelope is the **only** thing emitted on stdout in plan mode. Steps 1–6 a
 
 When `--plan` is absent, the pipeline runs normally and produces Steps 1–8 narration plus written files.
 
+### Validate mode
+
+When `$ARGUMENTS` contains the token `--validate-only`, DisC executes **Step 1 only** (the refusal-grade contract checks) and exits. **No files are written. No file-writing tool is invoked.** No tests, no implementation, no plan envelope — only the verdict on whether the design is shaped well enough to feed into Steps 2–6. Validate mode lets host tools (e.g., DisC Studio) preflight the design at authoring time before the user commits to a full run.
+
+**Strict-output rule** — exactly as in plan mode, Step 1 is reasoned about internally; **no per-step narration, no markdown headings, no "Validation Results" prose, no checklist of which rules passed**. The stdout contract is one of exactly two shapes:
+
+- **On Step 1 pass:** the literal single line `{"ok": true}` — nothing before it, nothing after it. Exit code 0.
+- **On Step 1 refusal:** the standard `#### REFUSAL — STOP` markdown block exactly as defined in the Step 1 refusal protocol below — same wording, same EXPLAIN + SUGGEST sections, same exit code (non-zero). Host tools render this verbatim.
+
+Any other output (progress narration, partial summaries, "let me check…" preambles) is a contract violation that host tools cannot parse. Run the checks silently; emit only the verdict.
+
+When `--validate-only` is absent and `--plan` is absent, the pipeline runs normally. When both flags are present, `--validate-only` wins (it is a strict subset of `--plan`).
+
 ### Step 1: Validate Design
 
 The input set contains at least one `.puml` (UML sequence diagram) and may also contain one or more `decision_table_file`s (`<Participant>.decision.md`). The plugin reads decision-table files **from the same folder as the `.puml` being processed** — not from a project-wide `design/` root. This lets nested designs (a parent `.puml` with sibling-folder children) keep their decision tables locally scoped to their level of the call tree.
@@ -350,15 +363,15 @@ The input set contains at least one `.puml` (UML sequence diagram) and may also 
 
 `participant` · `call_arrow` · `return_arrow` · `loop_block` · `branch_block` · `throw_arrow`
 
-Use the disambiguation rules ("Distinguishing `call_arrow` from `return_arrow`") when arrow styles are identical. Confirm `target_placement` is declared per the `language_profile`'s form.
+Use the disambiguation rules ("Distinguishing `call_arrow` from `return_arrow`") when arrow styles are identical. Confirm `target_placement` is declared on the design file.
 
 **For each `decision_table_file`:** parse the YAML frontmatter and the markdown table. Confirm:
 - `target:` is present and well-formed (`Class.method`).
 - `input:` is present and declares a type for every input column used in the table.
 - `output:` is present and declares the method's return type.
-- `target_placement` is declared per the `language_profile`'s form.
+- `target_placement` is declared.
 - Every column header in the markdown table maps to either a declared `input.*` key or an `expected.*` output field.
-- Row cell values are coercible to their declared types (string literals quoted, numerics unquoted).
+- Row cell literals are well-formed (string literals quoted, numerics unquoted).
 - Exception rows are well-formed: output cell is `throws: <ExceptionType>` (optionally `: "<message>"`).
 - At least one row exists.
 
@@ -371,36 +384,29 @@ Use the disambiguation rules ("Distinguishing `call_arrow` from `return_arrow`")
 Refuse when:
 
 *UML structure:*
-- An arrow has no method name label
-- A fragment type is not defined (`par`, `critical`, `break` are not supported)
-- Circular arrows exist with no clear entry point
-- Participant names don't follow naming conventions
+- An arrow has no method name label.
 - A diagram has no `system_caller`. Every `.puml` must declare exactly one `system_caller` (the caller of the entry interaction).
 - A diagram declares more than one `system_caller`. One `.puml` = one method-under-test = one entry interaction.
-- A diagram's entry interaction targets a `leaf_node` (no outgoing `call_arrow`s). The `system_caller` must call an orchestrator.
 - A diagram's entry interaction is nested inside a `branch_block`, `loop_block`, or other fragment. The entry interaction lives at top level.
 
 *Decision-table well-formedness:*
-- A `decision_table_file` has missing or malformed frontmatter, undeclared column types, or zero rows
-- A `decision_table_file`'s `target:` does not resolve to a `pure function` leaf in any UML in the input set (see Step 2 pairing)
+- A `decision_table_file` has missing or malformed frontmatter, or zero rows.
+- A `decision_table_file`'s `target:` does not resolve to a `pure function` leaf in any UML in the input set (see Step 2 pairing).
 - A `decision_table_file` leaves a `required_decision` unspecified AND `config:` does not pin it. The refusal message names the decision and instructs the human to either (a) add a row that demonstrates the choice, or (b) add the corresponding `config:` key (see the `language_profile` for the recognized key for each decision).
-- A `decision_table_file`'s `config:` contains a key not enumerated in the `language_profile`. DisC does not silently ignore unknown keys.
 
 *Participant stereotype:*
-- A `participant_target` stereotype is malformed: empty FQN (`<<@class:>>`), FQN that does not match the `language_profile`'s package convention, or a `+method` listed in an `extend:` form whose name does not appear as a `call_arrow` callee method on this participant in any UML in the input set.
+- A `participant_target` stereotype is malformed: empty FQN (`<<@class:>>`), or a `+method` listed in an `extend:` form whose name does not appear as a `call_arrow` callee method on this participant in any UML in the input set.
 - A participant declared with `participant_target = existing:<fqn>` has any outgoing `call_arrow`. Reuse-as-is means no behavioural change; if the design needs to call methods on this participant, the participant must be a different role (typically `extend:`) or the design must be restructured.
 - A `+method` listed in an `extend:<fqn>:+method,...` does not appear as a `call_arrow` callee on this participant. Every listed method must be exercised by the design.
 - A participant declared with `participant_target = defer:<path>` is the target of the entry interaction. Its own `.puml` defines that — refuse, and direct the human to invoke DisC on the child `.puml` instead.
 - A participant declared with `participant_target = defer:<path>` has any outgoing `call_arrow` in this diagram. Deferral means the internals are designed elsewhere; declaring them here is a contradiction.
-- A participant declares more than one `participant_target` stereotype (e.g., both `<<@class:fqn>>` and `<<defer-design>>`). Pick exactly one form. The four forms (`create`, `existing:`, `extend:`, `defer:`) are mutually exclusive.
+- A participant declares more than one `participant_target` stereotype. Pick exactly one form. The four forms (`create`, `existing:`, `extend:`, `defer:`) are mutually exclusive.
 
 *Entity prelude:*
 - An `entity_declaration`'s kind is not one of `record`, `enum`, `class`, `interface`, `sealed-interface`.
-- A `sealed_family` declares fewer than 2 permits. Java's `sealed` modifier is for closed disjoint unions; with one permit, declare the variant directly as a regular record.
+- A `sealed_family` declares fewer than 2 permits. The `sealed-interface` kind models closed disjoint unions; with one permit there is no choice — declare the variant directly as a `record` or `class`.
 - A `sealed_family` permit name does not resolve to a `record` or `class` `entity_declaration` in the same `entity_prelude`.
 - An entity declared with `entity_target = existing:<fqn>` carries body content (fields, values, behaviors, or permits). REUSE means as-is — FQN binding only. The shape is read from the existing source.
-- A REUSE `sealed_family` (`entity_target = existing:<fqn>`) declares permits that don't match the existing source's `permits` clause exactly. REUSE means as-is; declare the family as `create` in the design, or wait for v0.9 UPDATE-entity support that lets you append permits via a dedicated stereotype.
-- A method signature (on any `participant` method OR on any `sealed_family` behavior) references a type that is neither primitive/JDK/boundary-carrier nor declared as an `entity_declaration` in the `entity_prelude` nor a `participant` in the same input set. (Only applies when an `entity_prelude` is present — absent prelude triggers signature inference.)
 - A `variant_decision_table`'s target permit does not implement the sealed parent it claims to override, or names a behavior that does not exist on the parent.
 - A `sealed_family` permit name collides with a `participant` name in the same input set. An identifier cannot be both an entity and a participant — rename one.
 
@@ -440,21 +446,21 @@ Refusals for malformed stereotypes, `existing` or `defer` participants with outg
 8. Parse the `entity_prelude` (when present) and build the entities map:
    - For each `entity_declaration`, record `{name, kind, fields, values, behaviors, permits, existingFqn, target}`.
    - For each `sealed_family`, link each permit name to its declaration in the same map; the permit's kind must be `record` or `class`.
-   - For each `entity_target = existing:<fqn>` entity, Step 3g will read the existing source — for now just record the FQN binding.
-   - Cross-reference every type token used in participant method signatures AND in sealed-interface behaviors: must resolve to an entry in the entities map, a `participant` in the same input set, a primitive, a JDK type, or a boundary carrier (`*Request`/`*Response`/`*DTO`).
+   - For each `entity_target = existing:<fqn>` entity, record the FQN binding; Step 3g will read the existing source.
+   - Cross-reference every type token used in participant method signatures AND in sealed-interface behaviors: must resolve to an entry in the entities map, a `participant` in the same input set, a primitive, a language standard-library type (per the `language_profile`'s Domain Type Rule), or a boundary carrier (`*Request`/`*Response`/`*DTO`).
    - Pair each remaining `decision_table_file` (unpaired in step 7) as a `variant_decision_table` candidate:
      - Parse `target: Class.method`.
      - Locate `Class` in the entities map. It must be a permit of some `sealed_family`.
-     - Locate `.method` on the parent sealed interface's behaviors[]. It must exist.
+     - Locate `.method` on the parent `sealed-interface`'s behaviors[]. It must exist.
      - Mark that permit's override of that method as **filled**. Record the attached `variant_decision_table`.
      - If `Class` is not a permit, or `.method` is not a parent behavior, refuse per Step 1's refusal protocol.
-   - When `entity_prelude` is absent, step 8 short-circuits to no-op. Type-token resolution does not apply; the legacy signature-inference path runs in Step 3 instead.
+   - When `entity_prelude` is absent, step 8 short-circuits to no-op. Type-token resolution does not apply; signature inference runs in Step 3 instead.
 
 ### Step 3: Resolve Targets
 
 **3a. Detect language/framework** — Determine which `language_profile` to load:
 
-1. If the user specifies a language/framework, use that.
+1. If the user specifies a `language_profile`, use that.
 2. Otherwise, detect from project files:
 
 | Signal files | Language profile |
@@ -478,20 +484,20 @@ Load the matched `language_profile`. All subsequent steps use its conventions.
 For each participant, derive the mode from its declared `participant_target` (recorded in Step 2.6.5):
 
 - `participant_target = create` → mode is **CREATE** for the participant's interface, implementation, and test. File paths come from the file's `target_placement` + the `language_profile`'s naming and package-placement conventions.
-- `participant_target = existing:<fqn>` → mode is **REUSE**. No interface, implementation, or test is generated for this participant. It is only referenced as a `collaborator` mock and constructor parameter in the `component_under_test`'s test and implementation. The participant's existing signatures are read from source to populate the `@Mock` field types where needed.
+- `participant_target = existing:<fqn>` → mode is **REUSE**. No interface, implementation, or test is generated for this participant. It is only referenced as a `collaborator` mock and constructor parameter in the `component_under_test`'s test and implementation. The participant's existing signatures are read from source to populate mock field types where needed.
 - `participant_target = extend:<fqn>:+method,...` → mode is **UPDATE** for all three files (interface, implementation, test). The FQN parses to the file path per the `language_profile`. Only the listed `+method` signatures and their corresponding test groups are added; everything else in the existing files is sacred.
 - `participant_target = defer:<path>` → mode is **STUB**. CREATE the interface and a throwing stub-implementation (the profile owns the stub template and the `Pending<Name>` naming). **No** test class. **No** decision table — `defer:` participants are not leaves and have no `decision_table_file` paired. The SUT still mocks the participant as a `collaborator` at its own test level (one-hop mocking invariant). The deferred child's own internals are designed and implemented by a future DisC run on `<path>`.
 
-**Fallback for participants with no `participant_target` declared:** glob the conventional file path per the `language_profile`. NEW → **CREATE**, EXISTS → **UPDATE**. This preserves backward compatibility with v0.5.x `.puml` files that predate the stereotype convention.
+**Fallback for participants with no `participant_target` declared:** glob the conventional file path per the `language_profile`. NEW → **CREATE**, EXISTS → **UPDATE**.
 
 **3g. Set mode per entity from `entity_target` (when `entity_prelude` is present):**
 
 For each entity in the entities map (built in Step 2.8), derive the mode from its declared `entity_target`:
 
-- `entity_target = create` → mode is **CREATE**. The file is `{basePackagePath}/<entity-package>/<Name>.java` per the `language_profile`'s entity-package convention. The file's body comes from the entity's kind and fields/values/behaviors/permits. For `sealed_family` parents, the body is the `sealed interface ... permits ...` declaration plus the parent's behaviors as abstract method signatures. For each permit, a separate **CREATE** is emitted: the permit's own record file, with an `implements <Parent>` clause and one `@Override` body per parent behavior (filled or skeleton — see Step 6).
-- `entity_target = existing:<fqn>` → mode is **REUSE**. No file is generated. Read the existing source: for a record, capture field names and types; for a sealed-interface, capture the permits clause. The captured shape is used in Step 5 (cross-check against the design's declared permits — refuse on mismatch) and in Step 4 codegen wherever the entity appears as a `data_mock` or method parameter.
+- `entity_target = create` → mode is **CREATE**. The file path comes from the `language_profile`'s entity-file convention; the body is the entity's kind plus its fields/values/behaviors/permits, expressed in the profile's per-kind template. For `sealed_family` parents, the body is the parent declaration (sealed-interface form per the profile) plus the parent's behaviors as abstract method signatures. For each permit, a separate **CREATE** is emitted: the permit's own record file, with the parent-implementation declaration (form per the profile) and one override body per parent behavior (filled or skeleton — see Step 6).
+- `entity_target = existing:<fqn>` → mode is **REUSE**. No file is generated. Read the existing source via the `language_profile`: for a record, capture field names and types; for a sealed-interface, capture the permits clause. **Refuse here** if a REUSE `sealed_family`'s design-declared permits don't match the existing source's permits clause exactly — REUSE is FQN binding only; permit drift is a design error. (To add a new permit to an existing sealed type, declare the family as `create` in the design.) The captured shape is used in Step 5 (cross-check) and in Step 4 codegen wherever the entity appears as a `data_mock` or method parameter.
 
-**Fallback when `entity_prelude` is absent:** every type referenced in a method signature that does not match a `participant` is generated as a plain class under the entity package, with no fields. This is the v0.5.x signature-inference behaviour.
+**Fallback when `entity_prelude` is absent:** every type referenced in a method signature that does not match a `participant` is generated as a plain class under the entity package, with no fields.
 
 ### Step 4: Generate Tests
 
@@ -511,9 +517,9 @@ For each classified element, apply its transformation rule from the Transformati
 | `leaf_node` (pure function), no file attached | "leaf_node" | `decision_table` skeleton |
 | `leaf_node` (pure function), `decision_table_file` attached | "leaf_node" | Filled tests, one per row |
 | Participant with `participant_target = defer:<path>` | "STUB mode" | Interface + throwing stub-impl only. No test class. No decision table. |
-| `entity_declaration` (`entity_target = create`) | "entity to file" (language profile owns the template per kind) | Java file under the entity package: `record`, `enum`, `class`, `interface`, or `sealed interface ... permits ...` |
+| `entity_declaration` (`entity_target = create`) | "entity to file" (language profile owns the template per kind) | File (per the `language_profile`'s entity-file convention) for one of: `record`, `enum`, `class`, `interface`, or sealed-interface family parent |
 | `entity_declaration` (`entity_target = existing:<fqn>`) | "REUSE entity" | No file. Source shape recorded in Step 3g is used wherever the entity appears downstream. |
-| `sealed_family` permit (each one) | "variant impl" | Each permit emits its record file with `implements <Parent>` and one `@Override` body per parent behavior. Body is **filled** from a paired `variant_decision_table`'s rows, or **skeleton** (throwing the language profile's variant marker exception) when no table is paired. A test file accompanies each permit. |
+| `sealed_family` permit (each one) | "variant impl" | Each permit emits its record file with the parent-implementation declaration and one override body per parent behavior. Body is **filled** from a paired `variant_decision_table`'s rows, or **skeleton** (throwing the language profile's variant marker exception) when no table is paired. A test file accompanies each permit. |
 
 Use the `language_profile`'s test class template and naming conventions.
 
@@ -533,13 +539,13 @@ Before writing anything, pass every check. Fix generated code if any check fails
 
 3. **File mode correctness** — Step 3 discovery complete. CREATE → Write tool. UPDATE → Edit tool. STUB → Write tool for interface and `Pending<Name>` stub-impl only; no test file. No existing content modified, moved, or deleted. No duplicate mock fields or test groups.
 
-4. **Type resolution** (only when `entity_prelude` is present) — Every type referenced in any participant method or sealed-interface behavior resolves to an `entity_declaration` in the entities map, a `participant` in the same input set, a primitive, a JDK type, or a boundary carrier. Any unresolved token is a Step 1 failure that slipped through — refuse rather than paper over.
+4. **Type resolution** (only when `entity_prelude` is present) — Every type referenced in any participant method or sealed-interface behavior resolves to an `entity_declaration` in the entities map, a `participant` in the same input set, a primitive, a language standard-library type (per the `language_profile`'s Domain Type Rule), or a boundary carrier. Any unresolved token refuses here — the design references a type DisC cannot place.
 
-5. **Sealed-family override completeness** — Every `sealed_family` permit produces an override for every parent behavior. Each override is either filled (from a paired `variant_decision_table`'s rows) or skeleton-throwing (with the language profile's variant marker exception). REUSE sealed-family permits clauses match the existing source's permits clause exactly — any drift is a Step 1 failure that slipped through.
+5. **Sealed-family override completeness** — Every `sealed_family` permit produces an override for every parent behavior. Each override is either filled (from a paired `variant_decision_table`'s rows) or skeleton-throwing (with the language profile's variant marker exception). REUSE sealed-family permits clauses match the existing source's permits clause exactly — any drift should have been refused at Step 3g; this is a belt-and-braces re-check.
 
 6. **Pattern rules:**
    - Every `collaborator` has a mock field; constructor includes all `collaborator`s and only `collaborator`s
-   - Every `data_mock` has a mock field (or real value for primitives/final classes)
+   - Every `data_mock` has a mock field (or real value for primitives and types the `language_profile` flags as non-mockable)
    - `throw_placement` correct (exception path calls method inside assertion, not in setup)
    - Error message constants declared in implementation, referenced by test
    - `leaf_node`s classified as `pure function`, `side effect`, or `factory`; standalone tests (pure functions only) use direct assertions, not `verify_test`s
@@ -579,16 +585,16 @@ Write the implementation using these values. There is no per-run audit log; the 
 
 **For participants with `participant_target = defer:<path>` (STUB mode):**
 
-The stub-implementation is canonical: every method on the interface throws an `UnsupportedOperationException` whose message names the deferred participant and the expected sub-design path. The exact template (annotation, naming, message string) is owned by the `language_profile`. The stub compiles and lets Spring wire the SUT's `@Autowired` dependency; only actual execution of the deferred behaviour fails, at runtime, with a clear DisC-tagged message that CI can grep for to block production deploys.
+The stub-implementation is canonical: every method on the interface throws the `language_profile`'s stub-marker exception, whose message names the deferred participant and the expected sub-design path. The exact template (annotation, naming, message string) is owned by the `language_profile`. The stub compiles and lets the application framework wire the SUT's dependency; only actual execution of the deferred behaviour fails, at runtime, with a clear DisC-tagged message that CI can grep for to block production deploys.
 
 **For `sealed_family` permits:**
 
-Each permit record carries one `@Override` method body per parent behavior. The body source depends on whether a `variant_decision_table` is paired:
+Each permit record carries one override method body per parent behavior. The body source depends on whether a `variant_decision_table` is paired:
 
-- **Filled mode** (`variant_decision_table` attached): apply the existing filled-mode generator (same rule as "pure function leaves with `decision_table_file` attached" above), but route the generated body into the permit's `@Override` method instead of a standalone `Default<Name>.java`. One `@Test` per row in the permit's accompanying test file.
-- **Skeleton mode** (no `variant_decision_table` paired): the override throws the language profile's variant marker exception (named after the deferred-design marker so CI greppable). The accompanying test file is a skeleton with one `@Test` placeholder per parent behavior, marked TODO for the human to fill.
+- **Filled mode** (`variant_decision_table` attached): apply the existing filled-mode generator (same rule as "pure function leaves with `decision_table_file` attached" above), but route the generated body into the permit's override method instead of a standalone consumer-default impl file. One test per row in the permit's accompanying test file.
+- **Skeleton mode** (no `variant_decision_table` paired): the override throws the language profile's variant marker exception (named after the deferred-design marker so CI greppable). The accompanying test file is a skeleton with one test placeholder per parent behavior, marked TODO for the human to fill.
 
-The sealed parent itself has no implementation file beyond its `sealed interface <Parent> permits <V1>, <V2>, ... { ... }` declaration — the parent's behaviors are abstract; the permits own the bodies. No standalone parent-test exists; the variants' tests cover correctness, and the orchestrator's test covers the dispatch.
+The sealed parent itself has no implementation file beyond its parent declaration (sealed-interface form per the `language_profile`) — the parent's behaviors are abstract; the permits own the bodies. No standalone parent-test exists; the variants' tests cover correctness, and the orchestrator's test covers the dispatch.
 
 ### Step 7: Write Files
 
@@ -623,7 +629,7 @@ Files:           [CREATE/UPDATE/STUB labels per file]
 3. Each `stub` matches a `return_arrow`.
 4. For skeleton decision tables AND skeleton variant impls: fill in TODO test cases / override bodies with real business examples.
 5. Each generated file's package matches the `target_placement` declared on its source design file.
-6. For each `sealed_family`, every permit's record file has an `implements <Parent>` clause and one `@Override` per parent behavior.
+6. For each `sealed_family`, every permit's record file has the parent-implementation declaration and one override per parent behavior.
 
 **Final steps:**
 1. Write files to disk per file mode
