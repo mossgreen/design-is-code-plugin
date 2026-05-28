@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-05-28
+
+### Added
+- `<<interface>>` may now be paired with `<<@permits:V1,V2,...>>` for an open-but-manifest variant set. The generated Java interface stays non-sealed (no `sealed` keyword, no `non-sealed`/`final` on permits) so third-party implementations remain possible and Spring `@Service` strategies still register; the design itself declares every implementation it owns. Canonical use case: resolver-pattern strategy hierarchies where the design manifest is closed but the Java contract must remain open for Spring auto-configuration. Each permit must resolve to a `record` or `class` `entity_declaration` in the same prelude.
+- Interface-with-permits permits emit as `public class V1 implements Parent` (not `record`) and parent/permits share the entity package, mirroring sealed-family layout. Per-variant impl mode is preserved (filled when paired with a `variant_decision_table`, skeleton otherwise). Users add `@Service` themselves when registering as Spring beans.
+- Third decision-table mode in `java_spring.md`: **Resolver impl from decision table**. Triggered when the target is `<Participant>.<method>`, the output type resolves to an interface (sealed or plain) with non-empty `<<@permits:>>`, and the `expected` column values exhaustively cover the permits. Emits a constructor-injected `Map<Key, Variant>` resolver implementation (`Default<Resolver>`) plus a row-by-row test that mocks each permit and verifies the Map lookup. Skeleton mode does not apply — an unpaired resolver decision table refuses at Step 1.
+
+### Changed
+- `java_spring.md` Per-variant impl mode now covers both sealed-family `record` permits AND interface-with-permits `class` permits — same impl-mode decision (filled vs skeleton), different surface syntax.
+- Variant decision-table pairing rule extended: the target's `Variant` may resolve to a permit of either a `sealed_family` OR an `interface` parent with `<<@permits:>>`.
+- Entity package placement table gained a row for `interface` parent with permits + all its permit classes (parent and permits share `{basePackage}.entity`, mirroring sealed-family layout).
+
 ## [0.9.0] - 2026-05-26
 
 ### Changed

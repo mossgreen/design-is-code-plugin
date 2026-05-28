@@ -169,7 +169,7 @@ ConsumerService <-- Parent : result : String
 - **`<<record>>`** — Java record. Body lists fields: `+ fieldName: Type` per line. Becomes `public record Name(Type fieldName, ...)`.
 - **`<<enum>>`** — Java enum. Body lists values: `+ VALUE_NAME` per line.
 - **`<<class>>`** — mutable POJO. Body lists fields like `record`. Becomes a class with private fields, a no-arg constructor, getters, and setters. Use sparingly; prefer `record`.
-- **`<<interface>>`** — plain contract type (not a participant). Body lists behaviors: `+ method(arg: Type, ...): ReturnType`.
+- **`<<interface>>`** — plain contract type (not a participant). Body lists behaviors: `+ method(arg: Type, ...): ReturnType`. MAY be paired on the same line with `<<@permits:V1,V2,...>>` when the contract has a known set of implementations declared in the same prelude. The permits are a design-time manifest only — the generated Java does NOT carry the `sealed` keyword, no `non-sealed`/`final` modifiers are emitted on the permits, and the Java type is open to outside implementations at runtime. Each permit must resolve to a `record` or `class` `entity_declaration` in the same prelude. The order of `<<@permits:>>` is preserved in the generated artifacts.
 - **`<<sealed-interface>>`** — sealed contract type. Body lists behaviors (may be empty for pure sum types). **MUST** be paired on the same line with `<<@permits:V1,V2,...>>` listing 2+ variant names. Each permit must resolve to a `record` or `class` `entity_declaration` in the same prelude.
 
 ### REUSE form
@@ -179,7 +179,8 @@ ConsumerService <-- Parent : result : String
 
 ### Permits stereotype
 
-- `<<@permits:V1,V2>>` — comma-separated, no spaces required between names. Lives on the same line as `<<sealed-interface>>`. Each name must appear as another `entity_declaration` of kind `record` or `class` in the same prelude.
+- `<<@permits:V1,V2>>` — comma-separated, no spaces required between names. Lives on the same line as `<<sealed-interface>>` OR `<<interface>>`. Each name must appear as another `entity_declaration` of kind `record` or `class` in the same prelude.
+- **Interface vs sealed-interface with permits — when to use which.** Use `<<sealed-interface>>` + permits when the variant set is closed AT THE JAVA LEVEL (compile-time exhaustiveness on `switch`, no third-party implementors). Use `<<interface>>` + permits when the variant set is closed in the *design* (the manifest lists every implementation the design owns) but the Java contract should remain open (third-party impls, Spring `@Service` strategies, Spring Boot auto-configuration). The resolver pattern's strategy hierarchy is the canonical `<<interface>>` + permits case.
 
 ### When the prelude is absent
 
@@ -307,6 +308,7 @@ the implementation name will be referenced as "ImplementationName"
 | `*Controller` | `{basePackage}.controller` | `OrderController.java` |
 | Entity/model types | `{basePackage}.entity` or `{basePackage}.model` | `Order.java` |
 | `sealed-interface` family parent + all its permits | `{basePackage}.entity` (parent and permits share one package) | `Parent.java`, `V1.java`, `V2.java` |
+| `interface` parent **with permits** + all its permit classes | `{basePackage}.entity` (parent and permits share one package) | `Parent.java`, `V1.java`, `V2.java` |
 | `*Request`, `*Response`, `*DTO` | `{basePackage}.model` | `CreateOrderRequest.java` |
 | Test classes | Same package as implementation, under `src/test/java` | `DefaultOrderServiceTest.java` |
 
@@ -482,7 +484,8 @@ For each `entity_declaration` in the `entity_prelude` whose `entity_target = cre
 | `record` | `public record V1(String id) {}` (when this record is a permit of a `sealed_family`, append `implements <Parent>` and one `@Override` body per parent behavior — see *Per-variant impl mode* below) | `src/main/java/{basePackagePath}/entity/V1.java` |
 | `enum` | `public enum Kind { KIND_A, KIND_B }` | `src/main/java/{basePackagePath}/entity/Kind.java` |
 | `class` | mutable POJO: private fields + no-arg constructor + getters/setters | `src/main/java/{basePackagePath}/entity/Foo.java` |
-| `interface` | `public interface Foo { <behaviors...> }` | `src/main/java/{basePackagePath}/entity/Foo.java` |
+| `interface` (no permits) | `public interface Foo { <behaviors...> }` | `src/main/java/{basePackagePath}/entity/Foo.java` |
+| `interface` **with permits** | `public interface Parent { void behave(...); }` (NO `sealed` keyword) + one `public class V1 implements Parent { @Override ... }` file per permit. Each permit body uses the same per-variant impl mode as sealed permits (`variant_decision_table` → filled; absent → skeleton throw). Permits are emitted as `class` (not `record`) by default — strategies typically need Spring stereotypes and mutable state. Permits do NOT receive `@Service` automatically; users add it. | `Parent.java` + one `V1.java` per permit in the entity package. |
 | `sealed-interface` | `public sealed interface Parent permits V1, V2 { String behave(int input); }` — abstract behaviors only; the parent has no implementation body and no test class. Permits resolve without imports because they share the package (see Package Placement). | `src/main/java/{basePackagePath}/entity/Parent.java` |
 
 ### Record fields and behavior overrides
@@ -499,7 +502,7 @@ For a `record` entity that **is** a sealed-family permit, append the `implements
 
 ### Per-variant impl mode
 
-Each `sealed_family` permit owns one method body per parent behavior. The body source is decided by Step 2.8's `variant_decision_table` pairing.
+Each permit (sealed-family `record` permit OR interface-with-permits `class` permit) owns one method body per parent behavior. The body source is decided by Step 2.8's `variant_decision_table` pairing. Sealed-family permits emit as `public record V1(...) implements Parent`; interface-with-permits permits emit as `public class V1 implements Parent` (no record syntax, no `final` modifier, no Spring stereotype — users add `@Service` themselves when registering as Spring beans). Below the examples show records for the sealed case; substitute `class` + field declarations for the interface-with-permits case.
 
 **Skeleton mode** (no `variant_decision_table` paired):
 
@@ -583,8 +586,8 @@ config:
 Pairing rule (executed in SKILL.md Step 2.8):
 
 1. Parse `target: Variant.method`.
-2. Look up `Variant` in the entities map. Must be a permit of some `sealed_family`.
-3. Look up `.method` on the parent sealed interface's behaviors. Must exist.
+2. Look up `Variant` in the entities map. Must be a permit of some `sealed_family` OR a permit of an `interface` parent with `<<@permits:>>`.
+3. Look up `.method` on the parent interface's (sealed or plain) behaviors. Must exist.
 4. Pair the table with that permit's override of that method; mark filled.
 
 The frontmatter's `input:` declares the signature against which row cells type-check; `output:` declares the override's return type (or the parent behavior's return type if richer than primitive). Per-variant tests construct real variant instances (with arbitrary values for any record fields not exercised by the behavior — Java records are pure data, easy to instantiate).
@@ -592,6 +595,76 @@ The frontmatter's `input:` declares the signature against which row cells type-c
 ### REUSE sealed-family caveat
 
 A REUSE `sealed-interface` (`<<@class:fqn>>` with `<<@permits:V1,V2>>`) refuses any permit addition. The plugin reads the existing source's permits clause; the design's permits MUST match exactly. To add a new permit to an existing sealed Java type, declare the parent as `create` in the design (not REUSE).
+
+### Resolver impl from decision table
+
+When the decision table's `target` is a participant method whose return type is an `interface` (or `sealed-interface`) entity with `<<@permits:>>`, and the `expected` column values are permit names, the plugin emits a **Map-based resolver implementation** for that participant. This is a third decision-table mode alongside the pure-function leaf mode and the variant_decision_table mode.
+
+Frontmatter:
+
+```yaml
+---
+target: TransportResolver.resolve
+package: com.example.consumer
+input:
+  transport: Transport
+output: TransportGateway
+---
+
+| transport | expected      |
+|-----------|---------------|
+| EMAIL     | SmtpGateway   |
+| SMS       | TwilioGateway |
+| PUSH      | FcmGateway    |
+```
+
+Recognition rule (executed in SKILL.md Step 2.8 after sealed/interface permit checks):
+
+1. Parse `target: <Participant>.<method>`.
+2. `<Participant>` MUST be a participant (not an entity).
+3. `output` MUST resolve to an entity of kind `interface` or `sealed-interface` that has a non-empty `<<@permits:>>` list.
+4. Every value in the `expected` column MUST be a member of that permit list (no extras, no missing — exhaustive over the permits).
+
+When all four hold, the plugin generates the resolver implementation as a constructor-injected Map keyed by the input parameter, with each permit class injected as a separate constructor argument. The resolve method reads from the Map. Skeleton mode does not apply — without rows the resolver cannot be generated; an unpaired resolver decision table refuses at Step 1.
+
+Generated output for the example above:
+
+```java
+package com.example.consumer.service;
+
+import com.example.consumer.entity.SmtpGateway;
+import com.example.consumer.entity.Transport;
+import com.example.consumer.entity.TransportGateway;
+import com.example.consumer.entity.TwilioGateway;
+import com.example.consumer.entity.FcmGateway;
+import java.util.Map;
+import org.springframework.stereotype.Service;
+
+@Service
+public class DefaultTransportResolver implements TransportResolver {
+
+    private final Map<Transport, TransportGateway> gateways;
+
+    public DefaultTransportResolver(SmtpGateway smtpGateway,
+                                    TwilioGateway twilioGateway,
+                                    FcmGateway fcmGateway) {
+        this.gateways = Map.of(
+            Transport.EMAIL, smtpGateway,
+            Transport.SMS, twilioGateway,
+            Transport.PUSH, fcmGateway
+        );
+    }
+
+    @Override
+    public TransportGateway resolve(Transport transport) {
+        return gateways.get(transport);
+    }
+}
+```
+
+Accompanying test mocks each permit class and verifies the Map lookup returns the matching mock for each input — one `@Test` per row.
+
+**Why a separate mode.** The pure-function leaf mode would generate hardcoded literal returns; the variant_decision_table mode would attach the table to a permit's `@Override`. Neither produces the constructor-injected Map shape that a resolver needs. The recognition rule (output type is interface-with-permits, expected values are permit names) is precise enough to disambiguate without ambiguity against the other two modes.
 
 ---
 
