@@ -59,6 +59,8 @@ What the human authors. The first artifacts in the chain.
 
 - **`variant_decision_table`** — A `decision_table_file` whose `target: Variant.method` resolves to a permit record's override of a `sealed_family` behavior. Distinct pairing rule from the standard `decision_table_file` → `pure function` leaf pairing (see Step 2.8): the target resolves to an *entity permit*, not a *leaf participant*. When attached, the variant's override body is filled from rows; when absent, the override is generated in skeleton mode (throws a marker exception; a skeleton test is emitted).
 
+- **`boundary`** — A declared threshold on a numeric input column of a `decision_table_file`: a point in that input's domain where the expected behaviour changes (e.g. quantity ≥ 5 switches the discount tier). Declared in the table's frontmatter; the syntactic form is owned by the `language_profile`. Rows alone can never pin a threshold's location — rows at 4 and 10 with different tiers admit any cut between them — so a declared `boundary` obligates the table to *demonstrate* the location with a **bracketing pair**: one row at the largest adjacent value below the boundary (adjacency per the `language_profile`'s rule for the column's type) and one row at exactly the boundary, all other input columns held equal, with differing expected outputs. Step 1 refuses an unbracketed `boundary`; Step 6 pins the implementation's comparison to the declared value. Thresholds the author never declares remain unverified between rows — that residual duty is surfaced in the Step 8 checklist.
+
 #### Entity elements
 
 A parallel taxonomy to `participant`. Entities are **data** nodes (passed through `data_pipe`s); participants are **behavioral** nodes (called via `call_arrow`s). Entities are never mocked at the SUT level and never appear in any constructor as a `collaborator` — they show up in tests only as `data_mock`s the orchestrator passes between collaborator interactions.
@@ -101,16 +103,17 @@ Derived facts about the design, computed before tests are generated.
 
 - **`data_pipe`** — A relationship between two consecutive `interaction`s in which the `return_arrow` value of the first becomes an argument of the next.
 
-- **`participant_target`** — A declaration on a `participant` that tells DisC whether to CREATE it as a new abstraction, REUSE an existing type as-is, UPDATE an existing type by adding methods, or DEFER its design to a separate `.puml`. Absent by default (meaning `create`). Four mutually-exclusive forms:
+- **`participant_target`** — A declaration on a `participant` that tells DisC whether to CREATE it as a new abstraction, REUSE an existing type as-is, UPDATE an existing type by adding methods, DEFER its design to a separate `.puml`, or REGENERATE an existing orchestrator's implementation wholesale from the design. Absent by default (meaning `create`). Five mutually-exclusive forms:
 
   - **`create`** (default when no stereotype is declared on the participant): generate the interface, implementation, and tests for this participant under the file's `target_placement`.
   - **`existing:<fqn>`**: this participant is already implemented at the fully-qualified name `<fqn>`. DisC does not generate files for it; it appears only as a `collaborator` mock and constructor parameter. A participant declared as `existing` must have no outgoing `call_arrow`s (REUSE means as-is — no behavioural change).
   - **`extend:<fqn>:+method1,+method2,...`**: this participant exists at `<fqn>` but the design adds the listed methods. DisC opens the existing files (interface, implementation, test) in UPDATE mode and adds only the listed signatures.
   - **`defer:<relative_puml_path>`**: this participant is called by the SUT but its internals have not yet been designed; design them later in their own `.puml` at the given path. DisC generates the interface plus a throwing stub-implementation now, with no test class and no decision table. The actual implementation will come from running DisC on the child `.puml`. Like `existing:`, a `defer:` participant must have no outgoing `call_arrow`s in *this* diagram — its outgoing calls live in its own `.puml`. The path is optional in the stereotype; absent, the profile defaults to a sibling-folder convention (see `language_profile`).
+  - **`regenerate:<fqn>`**: this participant exists at `<fqn>` and is an `orchestrator` (it has outgoing `call_arrow`s) whose design has changed. DisC overwrites its implementation and test **wholesale** from the current design — not add-only — because an orchestrator's implementation is fully determined by its design (structure is determined), so it is a pure artifact with nothing hand-authored to preserve. Its `collaborator`s — especially `leaf_node`s — are never overwritten; they follow their own `participant_target`. This is what keeps *design is the source* true after the first generation: when an orchestrator's design changes, the artifact is regenerated, not hand-patched. Unlike `existing:` and `defer:`, a `regenerate:` participant MUST have outgoing `call_arrow`s. Because regeneration overwrites from the design, the diagram MUST describe this orchestrator's complete flow — every `call_arrow` it makes — or the regenerated implementation will omit the missing calls (see Step 7).
 
   Exactly one form per participant. The syntactic form of the stereotype is owned by the `language_profile`. The abstract concept defines what each declaration *means*; the profile defines how it *looks* in the diagram.
 
-  **One-hop mocking invariant.** The SUT's test always mocks its direct `collaborator`s as units, regardless of their `participant_target`. A `collaborator`'s own dependencies (its grandchildren in the call tree) never bubble up to the SUT's test. This is true for `create`, `existing:`, `extend:`, and `defer:` alike — each `collaborator` is one mock at the SUT's level.
+  **One-hop mocking invariant.** The SUT's test always mocks its direct `collaborator`s as units, regardless of their `participant_target`. A `collaborator`'s own dependencies (its grandchildren in the call tree) never bubble up to the SUT's test. This is true for `create`, `existing:`, `extend:`, `defer:`, and `regenerate:` alike — each `collaborator` is one mock at the SUT's level.
 
   **Direction of flow.** DisC is *outside-in* for interfaces and *inside-out* for implementations. A participant's interface is pinned by its callers' `call_arrow`s — the leaf does not author its own contract. Implementation flows the other way: each leaf is implemented from its own tests in isolation, and the orchestrator's implementation composes them. In a multi-level design (`defer:` participants), this convention spans `.puml` files: each child's interface is locked by the parent's call signatures (validated by the host's `contractHash`), and host tools build the tree bottom-up so an orchestrator is built only after its leaves' real implementations exist.
 
@@ -259,6 +262,12 @@ When AI generates both test cases and implementation for a `leaf_node`, it can p
 
 Prevention: humans design `decision_table` test cases. AI implements only.
 
+### Interpolation risk
+
+Decision-table rows constrain output only at the inputs they list. Between rows, the algorithm is unconstrained: rows at quantity 4 and quantity 10 with different discount tiers admit an implementation that switches tiers anywhere from 5 to 10 — every such implementation passes the table. The structural guarantee that holds for orchestrators ("only one implementation passes") does not extend to the space between rows.
+
+Prevention: every threshold the business rule contains is declared as a `boundary` and demonstrated by a bracketing pair of rows. Step 1 enforces bracketing for every declared `boundary`; Step 6 pins the implementation's comparisons to the declared values. DisC cannot detect a threshold the author never declared — the Step 8 checklist makes that residual review duty explicit.
+
 ### Dual testing
 
 A `pure function` leaf appears in two places:
@@ -374,6 +383,7 @@ Use the disambiguation rules ("Distinguishing `call_arrow` from `return_arrow`")
 - Row cell literals are well-formed (string literals quoted, numerics unquoted).
 - Exception rows are well-formed: output cell is `throws: <ExceptionType>` (optionally `: "<message>"`).
 - At least one row exists.
+- When `boundaries:` is declared: every key resolves to a declared numeric `input.*` column, and every declared `boundary` value has its bracketing pair of rows (adjacency per the `language_profile`): one row immediately below the boundary and one row at exactly the boundary, all other input columns equal, expected outputs differing.
 
 **Refusal protocol** — if any element is unsupported or ambiguous:
 
@@ -393,6 +403,8 @@ Refuse when:
 - A `decision_table_file` has missing or malformed frontmatter, or zero rows.
 - A `decision_table_file`'s `target:` does not resolve to a `pure function` leaf in any UML in the input set (see Step 2 pairing).
 - A `decision_table_file` leaves a `required_decision` unspecified AND `config:` does not pin it. The refusal message names the decision and instructs the human to either (a) add a row that demonstrates the choice, or (b) add the corresponding `config:` key (see the `language_profile` for the recognized key for each decision).
+- A `boundaries:` key does not resolve to a declared numeric `input.*` column.
+- A declared `boundary` has no bracketing pair. The refusal names the boundary and lists the exact missing row(s) — e.g. "boundary `quantity: 5` needs a row at `quantity = 4` and a row at `quantity = 5` with all other inputs equal and differing expected outputs."
 
 *Participant stereotype:*
 - A `participant_target` stereotype is malformed: empty FQN (`<<@class:>>`), or a `+method` listed in an `extend:` form whose name does not appear as a `call_arrow` callee method on this participant in any UML in the input set.
@@ -400,7 +412,9 @@ Refuse when:
 - A `+method` listed in an `extend:<fqn>:+method,...` does not appear as a `call_arrow` callee on this participant. Every listed method must be exercised by the design.
 - A participant declared with `participant_target = defer:<path>` is the target of the entry interaction. Its own `.puml` defines that — refuse, and direct the human to invoke DisC on the child `.puml` instead.
 - A participant declared with `participant_target = defer:<path>` has any outgoing `call_arrow` in this diagram. Deferral means the internals are designed elsewhere; declaring them here is a contradiction.
-- A participant declares more than one `participant_target` stereotype. Pick exactly one form. The four forms (`create`, `existing:`, `extend:`, `defer:`) are mutually exclusive.
+- A participant declared with `participant_target = regenerate:<fqn>` has **no** outgoing `call_arrow` in this diagram. Regeneration is for `orchestrator`s; a `leaf_node`'s content is human-owned and is never overwritten — to change a leaf, edit it directly or change its `decision_table_file`.
+- A participant declared with `participant_target = regenerate:<fqn>` whose `<fqn>` does not resolve to an existing file. Regeneration overwrites an existing artifact; a participant that does not yet exist is `create`, not `regenerate`.
+- A participant declares more than one `participant_target` stereotype. Pick exactly one form. The five forms (`create`, `existing:`, `extend:`, `defer:`, `regenerate:`) are mutually exclusive.
 
 *Entity prelude:*
 - An `entity_declaration`'s kind is not one of `record`, `enum`, `class`, `interface`, `sealed-interface`.
@@ -433,8 +447,9 @@ Identify which concepts apply:
 - `existing:<fqn>` — DisC will not generate files; the participant is referenced only as a `collaborator`.
 - `extend:<fqn>:+method1,+method2,...` — DisC will open the existing files at `<fqn>` in UPDATE mode and add the listed `+method` signatures.
 - `defer:<relative_puml_path>` — DisC will generate the interface and a throwing stub-implementation (per the `language_profile`), but no test class and no decision table. The actual implementation comes from a later DisC run on the child `.puml` at the given path.
+- `regenerate:<fqn>` — DisC will overwrite the orchestrator's implementation and test at `<fqn>` wholesale from the current design (REGEN mode in Step 3f); its `collaborator`s are untouched.
 
-Refusals for malformed stereotypes, `existing` or `defer` participants with outgoing arrows, entry-interaction targets that are deferred, multiple stereotypes on one participant, and unmatched `+method` lists belong to Step 1 — by this point they have already been ruled out.
+Refusals for malformed stereotypes, `existing` or `defer` participants with outgoing arrows, a `regenerate` participant with no outgoing arrows or pointing at a non-existent file, entry-interaction targets that are deferred, multiple stereotypes on one participant, and unmatched `+method` lists belong to Step 1 — by this point they have already been ruled out.
 
 7. Pair each `decision_table_file` with its target `pure function` leaf:
    - Parse the `target: Class.method` frontmatter field.
@@ -487,6 +502,7 @@ For each participant, derive the mode from its declared `participant_target` (re
 - `participant_target = existing:<fqn>` → mode is **REUSE**. No interface, implementation, or test is generated for this participant. It is only referenced as a `collaborator` mock and constructor parameter in the `component_under_test`'s test and implementation. The participant's existing signatures are read from source to populate mock field types where needed.
 - `participant_target = extend:<fqn>:+method,...` → mode is **UPDATE** for all three files (interface, implementation, test). The FQN parses to the file path per the `language_profile`. Only the listed `+method` signatures and their corresponding test groups are added; everything else in the existing files is sacred.
 - `participant_target = defer:<path>` → mode is **STUB**. CREATE the interface and a throwing stub-implementation (the profile owns the stub template and the `Pending<Name>` naming). **No** test class. **No** decision table — `defer:` participants are not leaves and have no `decision_table_file` paired. The SUT still mocks the participant as a `collaborator` at its own test level (one-hop mocking invariant). The deferred child's own internals are designed and implemented by a future DisC run on `<path>`.
+- `participant_target = regenerate:<fqn>` → mode is **REGEN** for the participant's implementation and test: both are overwritten wholesale from the current design (the `language_profile` owns the file paths and which files are overwritten, including how it distinguishes a `<fqn>` that names a separate interface from one that names a concrete class that is its own implementation). The orchestrator's public contract — a separate interface when one exists, otherwise the class's public method signatures — is left as-is; a contract change is not a REGEN. The participant's `collaborator`s are resolved by their own `participant_target` and are never overwritten by this participant's REGEN (one-hop boundary).
 
 **Fallback for participants with no `participant_target` declared:** glob the conventional file path per the `language_profile`. NEW → **CREATE**, EXISTS → **UPDATE**.
 
@@ -517,6 +533,7 @@ For each classified element, apply its transformation rule from the Transformati
 | `leaf_node` (pure function), no file attached | "leaf_node" | `decision_table` skeleton |
 | `leaf_node` (pure function), `decision_table_file` attached | "leaf_node" | Filled tests, one per row |
 | Participant with `participant_target = defer:<path>` | "STUB mode" | Interface + throwing stub-impl only. No test class. No decision table. |
+| Participant with `participant_target = regenerate:<fqn>` (orchestrator) | "participant to role" + interaction rules | Full test for the orchestrator — every collaborator interaction, generated as for CREATE (not add-only). Overwritten at write time (Step 7). |
 | `entity_declaration` (`entity_target = create`) | "entity to file" (language profile owns the template per kind) | File (per the `language_profile`'s entity-file convention) for one of: `record`, `enum`, `class`, `interface`, or sealed-interface family parent |
 | `entity_declaration` (`entity_target = existing:<fqn>`) | "REUSE entity" | No file. Source shape recorded in Step 3g is used wherever the entity appears downstream. |
 | `sealed_family` permit (each one) | "variant impl" | Each permit emits its record file with the parent-implementation declaration and one override body per parent behavior. Body is **filled** from a paired `variant_decision_table`'s rows, or **skeleton** (throwing the language profile's variant marker exception) when no table is paired. A test file accompanies each permit. |
@@ -552,6 +569,7 @@ Before writing anything, pass every check. Fix generated code if any check fails
    - `decision_table` skeletons marked TODO for human review (only when no `decision_table_file` is attached)
    - Filled decision-table tests have no TODO markers — every row produces a concrete test
    - For each filled `decision_table_file`, every `required_decision` is either demonstrated by rows or pinned by `config:`. (If it isn't, Step 1 should have refused — this is a belt-and-braces check.)
+   - Every declared `boundary` has its bracketing pair (belt-and-braces — Step 1 should have refused), and one generated test exists per bracketing row like any other row
    - `pure function` leaves both mocked in consumer AND get standalone tests (dual testing); `side effect` and `factory` leaves have no standalone test
    - Each `branch_block` has one `test_group` per branch with branch-specific `stub` setup
    - `loop_block` test data uses single-element collection
@@ -578,6 +596,7 @@ The implementation is a deterministic function of three inputs: the rows, the `c
 
 - Read the rows. They constrain output for every input combination they list.
 - Read `config:`. It pins the value for any decision the rows do not demonstrate.
+- Read `boundaries:`. Each declared `boundary` is a pinned threshold: the comparison constant in the implementation is the declared boundary value, and the operator's direction is read from the bracketing pair (the row at the boundary demonstrates which side the boundary value belongs to — if the at-boundary row shows the upper tier's output, the comparison is `>=` the boundary). Never compare against a value the rows and `boundaries:` do not pin, and never introduce a threshold that is not declared.
 - For any `optional_decision` the rows and `config:` are silent on, apply the `language_profile`'s documented default.
 - Do NOT make judgment calls on a `required_decision`. If one is unspecified at this point, Step 1 failed to refuse — stop and re-check Step 1, do not paper over it here.
 
@@ -600,12 +619,15 @@ The sealed parent itself has no implementation file beyond its parent declaratio
 
 **CREATE mode:** Write tool — complete file.
 **UPDATE mode:** Read tool first, then Edit tool — add only, never modify existing.
+**REGEN mode:** Write tool — overwrite the orchestrator's implementation and test with the freshly generated files. This is the **only** sanctioned use of the Write tool on an existing file, and it applies **only** to a participant declared `regenerate:<fqn>` (an orchestrator): an orchestrator's implementation is fully determined by its design, so there is nothing hand-authored to preserve.
 
-**Never** use the Write tool on an existing file.
+**Never** use the Write tool on an existing file — **except** a `regenerate:` orchestrator's own implementation and test.
 
-**Critical rule:** Existing content is sacred.
+**Critical rule:** Existing content is sacred — with the single exception of a `regenerate:` orchestrator's implementation and test. A `collaborator`'s files (especially `leaf_node`s) are NEVER overwritten, regardless of any orchestrator's REGEN.
 
-Use the `language_profile`'s UPDATE mode rules per file type.
+**Complete-design precondition for REGEN:** regeneration derives the implementation from the design, so the diagram must describe the orchestrator's complete flow — a `call_arrow` the design omits will be absent from the regenerated implementation. The host that emits the design owns completeness; Step 8 surfaces the residual review duty.
+
+Use the `language_profile`'s UPDATE and REGEN mode rules per file type.
 
 ### Step 8: Report
 
@@ -616,11 +638,13 @@ Interactions:    [E] entry + [N] collaborator = [total]
 Orchestrators:   [N] participants with outgoing arrows
 Leaf nodes:      [M] total ([P] pure function, [S] side effect, [F] factory)
 Deferred:        [D] participants stubbed; child .puml paths: [paths]
+Regenerated:     [G] orchestrators overwritten wholesale: [names]
 Entities:        [E_total] total ([R] record, [S] sealed-family, [N] enum, [I] interface, [C] class; [X] REUSE)
 Sealed-family variants: [V] permits ([VF] filled from variant_decision_table, [VS] skeleton)
 Decision tables: [K] filled from decision_table_file, [Q] skeletons for humans to fill
+Boundaries:      [B] declared, all bracketed
 Tests:           [N] verify_tests + [R] result_tests = [total] total
-Files:           [CREATE/UPDATE/STUB labels per file]
+Files:           [CREATE/UPDATE/STUB/REGEN labels per file]
 ```
 
 **Human verification checklist:**
@@ -630,6 +654,8 @@ Files:           [CREATE/UPDATE/STUB labels per file]
 4. For skeleton decision tables AND skeleton variant impls: fill in TODO test cases / override bodies with real business examples.
 5. Each generated file's package matches the `target_placement` declared on its source design file.
 6. For each `sealed_family`, every permit's record file has the parent-implementation declaration and one override per parent behavior.
+7. Every threshold in the business rule appears in its decision table's `boundaries:`. A threshold that is not declared is not verified between rows — declare it and add its bracketing pair, then re-run.
+8. For each `regenerate:` orchestrator: diff its regenerated implementation and test against version control before committing. Regeneration assumes the orchestrator carried no hand-edits to preserve and that the diagram described its complete flow — confirm both.
 
 **Final steps:**
 1. Write files to disk per file mode

@@ -81,6 +81,10 @@ participant DiscountRepository  <<@class:com.example.sale.DiscountRepository, +f
 
 - **`<<@class:fqn>>`** — abstract `existing:<fqn>`. Participant is reused from the type at `<fqn>`. DisC generates no files for it.
 - **`<<@class:fqn, +method1, +method2>>`** — abstract `extend:<fqn>:+method1,+method2`. Participant exists at `<fqn>` but the design adds the listed methods. Each `+method` must match a `call_arrow` callee method on this participant in the diagram.
+- **`<<@regen:fqn>>`** — abstract `regenerate:<fqn>`. The orchestrator at `<fqn>` is overwritten from the design (REGEN mode). `<fqn>` may point at either shape; DisC reads the source at `<fqn>` to tell which:
+  - `<fqn>` declares an **interface** (DisC-shaped code): rewrite `Default<Name>.java` and `Default<Name>Test.java` wholesale; the interface `<Name>.java` is untouched.
+  - `<fqn>` declares a **concrete class** (brownfield code with no separate interface): rewrite `<Name>.java` and `<Name>Test.java` wholesale — the class is its own implementation. Its public method signatures are its contract and must be preserved exactly; changing the public surface is a design change on its callers, not a REGEN.
+  In both forms the participant MUST have outgoing `call_arrow`s.
 - **Absence of stereotype** — implicit `create`. The default for greenfield design.
 
 ### FQN form
@@ -270,7 +274,7 @@ Conventions:
 
 ### Compatibility with other stereotypes
 
-`<<defer-design>>` is mutually exclusive with `<<@class:fqn>>` and `<<@class:fqn, +method>>`. Step 1 refuses any participant declaring more than one form. The four `participant_target` values (`create`, `existing:`, `extend:`, `defer:`) form a single dimension; pick exactly one per participant.
+`<<defer-design>>` is mutually exclusive with `<<@class:fqn>>`, `<<@class:fqn, +method>>`, and `<<@regen:fqn>>`. Step 1 refuses any participant declaring more than one form. The five `participant_target` values (`create`, `existing:`, `extend:`, `defer:`, `regenerate:`) form a single dimension; pick exactly one per participant.
 
 ---
 
@@ -472,6 +476,60 @@ Mapping from the entry interaction:
 | Domain type (EXISTS) | Nothing — skip | Everything |
 
 For participants with `participant_target = extend:<fqn>:+method1,+method2,...`, UPDATE mode applies to all three files (interface, implementation, test) for that participant. The rules above govern *what* is added: only the listed `+method` signatures, their corresponding method bodies, and one `@Nested` class per `+method` in the test. Methods that already exist on the participant in the source are read for type information (to populate `@Mock` types in dependent tests) but are not re-emitted.
+
+---
+
+## REGEN Mode Rules
+
+For a participant with `participant_target = regenerate:<fqn>` (`<<@regen:fqn>>`), REGEN mode overwrites the orchestrator's own files from the freshly generated design. Read the source at `<fqn>` first: an **interface** there means DisC-shaped code (the `Default<Name>` convention applies); a **concrete class** means brownfield code that is its own implementation.
+
+| File type | `<fqn>` is an interface | `<fqn>` is a concrete class |
+|---|---|---|
+| Implementation | **Overwrite** `Default<Name>.java` with the Write tool — body derived from the regenerated test. New constructor params/fields for new collaborators (e.g. an injected resolver) replace the old set. | **Overwrite** `<Name>.java` the same way. The class's public method signatures are its contract — reproduce them exactly. |
+| Test | **Overwrite** `Default<Name>Test.java` — the full test for the new design (every `verify()`), not add-only. | **Overwrite** `<Name>Test.java` the same way (create it if absent). |
+| Interface | `<Name>.java` **untouched.** The orchestrator's public contract is stable across a body change. A change to the public surface is a separate `extend:` concern. | (none — the class is its own contract; keep its public signatures stable) |
+| Collaborators / leaves | **Never touched** by this participant's REGEN. Each follows its own `participant_target` (REUSE / UPDATE / CREATE). | same |
+
+REGEN is the inverse of UPDATE's add-only rule, allowed for exactly one reason: an orchestrator's implementation is *fully determined* by its design, so overwriting it preserves nothing a human authored. This is false for `leaf_node`s — their content is sampled and human-owned — which is why Step 1 refuses `regenerate:` on a leaf.
+
+**Precondition:** the diagram must describe the orchestrator's complete flow. A `call_arrow` the design omits is dropped from the regenerated implementation. The host that emits the `.puml` owns completeness; the operator verifies each regenerated file against version control (Step 8).
+
+### Worked example: REGEN mode (follow-up ticket)
+
+`SaleService` already exists and calls `TaxCalculator.calculate(...)` directly. A follow-up ticket adds a second tax strategy, selected per request. The emitted design routes `SaleService` through a `TaxCalculatorResolver` and adds an `InternationalTax` variant:
+
+```plantuml
+@startuml
+' @package com.example.sale
+class TaxCalculator    <<interface>> <<@permits:DomesticTax,InternationalTax>> {
+  + calculate(order: Order): Money
+}
+class DomesticTax      <<@class:com.example.sale.DomesticTax>>      ' existing variant — leaf, untouched
+class InternationalTax <<class>>                                   ' new variant — CREATE skeleton
+
+participant SaleService           <<@regen:com.example.sale.SaleService>>   ' orchestrator — overwrite from design
+participant TaxCalculatorResolver                                           ' new resolver — CREATE
+
+[*] -> SaleService : createSale(order)
+SaleService -> TaxCalculatorResolver : resolve(key)
+SaleService <-- TaxCalculatorResolver : strategy : TaxCalculator
+SaleService -> TaxCalculator : calculate(order)
+[*] <-- SaleService : receipt : Receipt
+@enduml
+```
+
+Step 3 outcomes:
+
+| Participant / entity    | `participant_target` | Mode   | Files |
+|-------------------------|----------------------|--------|---|
+| `SaleService`           | `regenerate:...`     | REGEN  | overwrite `DefaultSaleService.java` + `DefaultSaleServiceTest.java`; `SaleService.java` untouched |
+| `TaxCalculatorResolver` | (none → `create`)    | CREATE | `TaxCalculatorResolver.java`, `DefaultTaxCalculatorResolver.java` (Map-based, from the resolver decision table), `DefaultTaxCalculatorResolverTest.java` |
+| `InternationalTax`      | (new permit)         | CREATE | `InternationalTax.java` — skeleton override; human fills |
+| `DomesticTax`           | `existing:...`       | REUSE  | none — leaf untouched |
+
+`DefaultSaleService` is rewritten to inject `TaxCalculatorResolver`, call `resolve(...)`, then dispatch to the returned `TaxCalculator` — its old direct call to `DomesticTax` is gone because the new design replaces it. `DomesticTax`'s own logic is never touched. Per Step 8, diff `DefaultSaleService` against version control before committing.
+
+**Brownfield form.** If `SaleService` were a bare `@Service` class at `com.example.sale.SaleService` (no separate interface — the usual shape in code DisC did not generate), the stereotype is identical: `<<@regen:com.example.sale.SaleService>>`. Reading the source at the FQN reveals a class, so REGEN overwrites `SaleService.java` and `SaleServiceTest.java` directly, preserving `createSale`'s public signature exactly. Everything else in the example is unchanged.
 
 ---
 
@@ -719,6 +777,7 @@ output: Product
 - `target: <Class>.<method>` — required. Names the participant and call_arrow in the UML this table specifies.
 - `input:` — required. Map of column name → type for every input column.
 - `output:` — required. Return type of the target method (or the object type when output columns are `expected.<field>`).
+- `boundaries:` — optional. Declares the thresholds the target's business rule contains, per numeric input column. Each declared boundary must be demonstrated by a bracketing pair of rows; grammar and rules below.
 - `config:` — optional. Pins behaviour-changing choices the rows do not demonstrate. Keys are enumerated below; unknown keys cause Step 1 refusal.
 
 **Recognized `config:` keys:**
@@ -743,6 +802,51 @@ Unknown `config:` keys cause Step 1 refusal — DisC will not silently ignore th
 | Whitespace | Preserve unless a row demonstrates a transformation | None — change a row instead |
 
 `config:` uses the YAML literal (e.g., `ROOT`); the implementation uses the Java constant (`Locale.ROOT`). Defaults are applied silently when rows and `config:` are silent; they are not reported per run.
+
+**Boundary declarations (`boundaries:`):**
+
+A threshold is a point in a numeric input's domain where the expected behaviour changes (quantity ≥ 5 switches the discount tier). Rows alone cannot pin a threshold's location — rows at 4 and 10 with different tiers admit any cut between them — so thresholds are declared and then demonstrated:
+
+```yaml
+boundaries:
+  quantity: [5, 10]
+```
+
+- Each key must be a declared `input:` column of a numeric type (`int`, `Integer`, `long`, `Long`, `short`, `byte`, `double`, `float`, `BigDecimal`, `BigInteger`). A key that is not a numeric input column refuses at Step 1.
+- Each value is an ascending list of boundary points on that column, written in the column's literal format.
+- **Bracketing rule** — for every declared boundary `B`, the table must contain two rows that hold every other input column equal and produce different expected outputs:
+  - one row at the largest adjacent value below `B` — integer types: `B − 1`; `BigDecimal`/floating-point: `B` minus one unit at the boundary literal's scale (boundary `5.00` → row at `4.99`);
+  - one row at exactly `B`.
+- **Operator inference (Step 6)** — the at-`B` row demonstrates which side of the cut the boundary value belongs to. When the at-`B` row shows the upper tier's output, the implementation compares `x >= B` (the below-row pins the lower tier); when it shows the lower tier's output, the comparison is `x > B`. The implementation must compare against the declared boundary value — never an interpolated one, and never a threshold that is not declared.
+- A declared boundary with no bracketing pair refuses at Step 1; the refusal lists the exact missing rows.
+
+Example — bulk-discount tiers (0% below 5 items, 10% from 5, 20% from 10):
+
+```markdown
+---
+target: BulkDiscountCalculator.calculate
+package: com.example.sale
+input:
+  quantity: Integer
+  lineSubtotal: BigDecimal
+output: BigDecimal
+boundaries:
+  quantity: [5, 10]
+config:
+  rounding: HALF_UP
+  scale: 2
+  nullHandling: throw
+---
+
+| quantity | lineSubtotal | expected |
+|----------|--------------|----------|
+| 4        | 500.00       | 0.00     |
+| 5        | 500.00       | 50.00    |
+| 9        | 900.00       | 90.00    |
+| 10       | 900.00       | 180.00   |
+```
+
+Rows 4/5 bracket the first boundary and rows 9/10 the second — each pair holds `lineSubtotal` equal so the output change is attributable to crossing the boundary alone. Without `boundaries:`, the same table would pass Step 1, but an implementation switching tiers at quantity 6 would also pass it — the tier cuts would be unverified between rows.
 
 **Row conventions:**
 - String literals quoted: `"Widget"`. Whitespace inside the quotes is meaningful.
@@ -789,6 +893,7 @@ class DefaultProductMapperTest {
 - Exception rows use `assertThatThrownBy`. When the row specifies a message, chain `.hasMessage(...)`.
 - No TODO markers. Every row is concrete.
 - Every `required_decision` (see the `config:` keys table above) MUST be either demonstrated by rows or pinned by `config:`. Otherwise Step 1 refuses.
+- Every declared `boundary` MUST be demonstrated by its bracketing pair (Step 1 enforces). The implementation's comparisons use the declared boundary values, with operators inferred from the bracketing rows.
 - `optional_decision` behaviour is applied silently when rows and `config:` are silent. The full list and defaults are in the **Recognized `optional_decision` entries** table above.
 
 ---

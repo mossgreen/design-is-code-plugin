@@ -34,7 +34,7 @@ DisC works with any design representation that meets this precision bar. UML seq
 The key mechanism:
 1. Tests are generated from the design
 2. The implementation is driven by tests alone
-3. You get what you design, no code review needed
+3. You get what you design — review happens at design time, not in code review
 
 ```
  Design Artifact (UML Sequence Diagram, etc.)
@@ -49,6 +49,11 @@ The key mechanism:
   Working Code (Reviewed designs don't need code review)
 ```
 
+The no-review claim is scoped, and the scope is enforced:
+
+- **Orchestrators** — fully pinned. Every call, argument, and data flow is forced by mockist tests; there is only one collaboration structure that passes. No code review needed.
+- **Pure-function leaves** — pinned at every decision-table row and at every declared **boundary** (a threshold demonstrated by a bracketing pair of rows, e.g. quantity `4` → 0% and quantity `5` → 10% pin the tier cut at exactly 5; DisC refuses a declared boundary without its pair). Between rows, only declared boundaries are verified. The one remaining human duty is confirming every threshold in the business rule appears in `boundaries:` — a checklist item at sign-off, not code archaeology after generation.
+
 ## Participants
 
 Every participant in a design is either an **orchestrator** or a **leaf**.
@@ -57,7 +62,7 @@ An orchestrator has dependencies and coordinates them. Orchestrators are verifie
 
 A leaf has no outgoing calls. Because leaves cannot be verified by interaction tests, DisC classifies each one by what kind of work it does, and tests it accordingly:
 
-- **Pure function** — output depends only on inputs. Tested by decision table: humans design the test cases (input → expected output), AI implements only. AI must not invent both cases and implementation — that creates false positives where tests pass but logic is wrong. When a decision table is authored ahead of time as `design/<Participant>.decision.md`, DisC consumes it directly and generates filled tests; otherwise DisC emits a skeleton for humans to fill in.
+- **Pure function** — output depends only on inputs. Tested by decision table: humans design the test cases (input → expected output), AI implements only. AI must not invent both cases and implementation — that creates false positives where tests pass but logic is wrong. When a decision table is authored ahead of time as `design/<Participant>.decision.md`, DisC consumes it directly and generates filled tests; otherwise DisC emits a skeleton for humans to fill in. Thresholds in the rule (tier cuts, limits) are declared in the table's `boundaries:` frontmatter and demonstrated by bracketing rows — DisC refuses an undemonstrated boundary and pins the implementation's comparisons to the declared values.
 - **Side effect** — touches external systems (DB, network, clock, queue). Mocked in consumer tests; correctness verified via integration tests, not DisC.
 - **Factory** — name ends in `Factory`. Assumed to be pass-through packaging into a constructor. No standalone test; correctness is transitive through the consumer.
 
