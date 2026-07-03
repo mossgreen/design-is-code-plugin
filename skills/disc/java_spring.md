@@ -81,10 +81,7 @@ participant DiscountRepository  <<@class:com.example.sale.DiscountRepository, +f
 
 - **`<<@class:fqn>>`** — abstract `existing:<fqn>`. Participant is reused from the type at `<fqn>`. DisC generates no files for it.
 - **`<<@class:fqn, +method1, +method2>>`** — abstract `extend:<fqn>:+method1,+method2`. Participant exists at `<fqn>` but the design adds the listed methods. Each `+method` must match a `call_arrow` callee method on this participant in the diagram.
-- **`<<@regen:fqn>>`** — abstract `regenerate:<fqn>`. The orchestrator at `<fqn>` is overwritten from the design (REGEN mode). `<fqn>` may point at either shape; DisC reads the source at `<fqn>` to tell which:
-  - `<fqn>` declares an **interface** (DisC-shaped code): rewrite `Default<Name>.java` and `Default<Name>Test.java` wholesale; the interface `<Name>.java` is untouched.
-  - `<fqn>` declares a **concrete class** (brownfield code with no separate interface): rewrite `<Name>.java` and `<Name>Test.java` wholesale — the class is its own implementation. Its public method signatures are its contract and must be preserved exactly; changing the public surface is a design change on its callers, not a REGEN.
-  In both forms the participant MUST have outgoing `call_arrow`s.
+- **`<<@regen:fqn>>`** — abstract `regenerate:<fqn>`. The orchestrator at `<fqn>` is overwritten from the design (REGEN mode). `<fqn>` resolves to either an interface or a class (see FQN form): an interface means the `Default<Name>` convention applies — rewrite `Default<Name>.java` and `Default<Name>Test.java`, leaving the interface `<Name>.java` untouched; a class is its own implementation — rewrite `<Name>.java` and `<Name>Test.java`, preserving the class's public method signatures exactly (a change to the public surface is a separate `extend:` concern). The participant MUST have outgoing `call_arrow`s.
 - **Absence of stereotype** — implicit `create`. The default for greenfield design.
 
 ### FQN form
@@ -481,14 +478,15 @@ For participants with `participant_target = extend:<fqn>:+method1,+method2,...`,
 
 ## REGEN Mode Rules
 
-For a participant with `participant_target = regenerate:<fqn>` (`<<@regen:fqn>>`), REGEN mode overwrites the orchestrator's own files from the freshly generated design. Read the source at `<fqn>` first: an **interface** there means DisC-shaped code (the `Default<Name>` convention applies); a **concrete class** means brownfield code that is its own implementation.
+For a participant with `participant_target = regenerate:<fqn>` (`<<@regen:fqn>>`), REGEN mode overwrites the orchestrator's own files from the freshly generated design. `<fqn>` resolves to either an interface or a class (see FQN form): an interface means the `Default<Name>` convention locates the files; a class is its own implementation.
 
-| File type | `<fqn>` is an interface | `<fqn>` is a concrete class |
+| File type | `<fqn>` resolves to an interface | `<fqn>` resolves to a class |
 |---|---|---|
 | Implementation | **Overwrite** `Default<Name>.java` with the Write tool — body derived from the regenerated test. New constructor params/fields for new collaborators (e.g. an injected resolver) replace the old set. | **Overwrite** `<Name>.java` the same way. The class's public method signatures are its contract — reproduce them exactly. |
 | Test | **Overwrite** `Default<Name>Test.java` — the full test for the new design (every `verify()`), not add-only. | **Overwrite** `<Name>Test.java` the same way (create it if absent). |
-| Interface | `<Name>.java` **untouched.** The orchestrator's public contract is stable across a body change. A change to the public surface is a separate `extend:` concern. | (none — the class is its own contract; keep its public signatures stable) |
-| Collaborators / leaves | **Never touched** by this participant's REGEN. Each follows its own `participant_target` (REUSE / UPDATE / CREATE). | same |
+| Interface | `<Name>.java` **untouched.** The orchestrator's public contract is stable across a body change. A change to the public surface is a separate `extend:` concern. | No separate interface file — the contract is the class's public method signatures, preserved by the Implementation rule. |
+
+**Collaborators and leaves are never touched** by this participant's REGEN — each follows its own `participant_target` (CREATE / REUSE / UPDATE / STUB).
 
 REGEN is the inverse of UPDATE's add-only rule, allowed for exactly one reason: an orchestrator's implementation is *fully determined* by its design, so overwriting it preserves nothing a human authored. This is false for `leaf_node`s — their content is sampled and human-owned — which is why Step 1 refuses `regenerate:` on a leaf.
 
@@ -529,7 +527,7 @@ Step 3 outcomes:
 
 `DefaultSaleService` is rewritten to inject `TaxCalculatorResolver`, call `resolve(...)`, then dispatch to the returned `TaxCalculator` — its old direct call to `DomesticTax` is gone because the new design replaces it. `DomesticTax`'s own logic is never touched. Per Step 8, diff `DefaultSaleService` against version control before committing.
 
-**Brownfield form.** If `SaleService` were a bare `@Service` class at `com.example.sale.SaleService` (no separate interface — the usual shape in code DisC did not generate), the stereotype is identical: `<<@regen:com.example.sale.SaleService>>`. Reading the source at the FQN reveals a class, so REGEN overwrites `SaleService.java` and `SaleServiceTest.java` directly, preserving `createSale`'s public signature exactly. Everything else in the example is unchanged.
+**`<fqn>` resolves to a class.** If `SaleService` were a bare `@Service` class at `com.example.sale.SaleService` (no separate interface — the usual shape for code DisC did not generate), the stereotype is identical: `<<@regen:com.example.sale.SaleService>>`. The FQN resolves to a class, so REGEN overwrites `SaleService.java` and `SaleServiceTest.java` directly, preserving `createSale`'s public signature exactly. Everything else in the example is unchanged.
 
 ---
 
