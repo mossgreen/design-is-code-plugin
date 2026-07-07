@@ -275,15 +275,13 @@ For `pure function` leaves:
 
 ### False positive risk
 
-When AI generates both test cases and implementation for a `leaf_node`, it can produce matching pairs that pass but do not reflect actual requirements. AI writes: test expects X, implementation returns X. But the human needed Y.
-
-Prevention: humans design `decision_table` test cases. AI implements only.
+When AI invents both a leaf's test cases and its implementation, the pair can agree and still be wrong: test expects X, implementation returns X, but the human needed Y. Prevention: humans author `decision_table` rows; AI implements only.
 
 ### Interpolation risk
 
 Decision-table rows constrain output only at the inputs they list. Between rows, the algorithm is unconstrained: rows at quantity 4 and quantity 10 with different discount tiers admit an implementation that switches tiers anywhere from 5 to 10 — every such implementation passes the table. The structural guarantee that holds for orchestrators ("only one implementation passes") does not extend to the space between rows.
 
-Prevention: every threshold the business rule contains is declared as a `boundary` and demonstrated by a bracketing pair of rows. Step 1 enforces bracketing for every declared `boundary`; Step 6 pins the implementation's comparisons to the declared values. DisC cannot detect a threshold the author never declared — the Step 8 checklist makes that residual review duty explicit.
+Prevention: declare every threshold as a `boundary` and demonstrate it with a bracketing pair (Step 1 enforces; Step 6 pins the comparisons). A threshold never declared is never verified between rows — checklist 7 (numeric) and checklist 9 (finite domains) carry that residual duty.
 
 ### Dual testing
 
@@ -561,7 +559,7 @@ Use the `language_profile`'s test class template and naming conventions.
 
 ### Step 5: Check Tests
 
-Before writing anything, pass every check. Fix generated code if any check fails.
+Before writing anything, pass every check. Fix generated code if any check fails. These checks establish the projection's internal consistency — design → tests → implementation transcribed faithfully — not the design's correctness; that stays with its author (see the guarantee ledger).
 
 **Self-reflection protocol:** Iterate your output until you rate it 10/10 against an internal rubric before proceeding. Do not infer patterns not defined in this methodology.
 
