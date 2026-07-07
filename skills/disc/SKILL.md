@@ -8,12 +8,14 @@ You are executing the DisC (Design is Code) methodology. Transform the provided 
 
 ## Context
 
-In DisC, the design is the source. Tests are derived from the design. Implementation is derived from the tests. Code is never written directly — it is the last link in a deterministic chain that begins with a human-authored design.
+In DisC the design is the source: design → tests → implementation. Tests are derived from the design, implementation from the tests; code is never written directly.
 
-Two kinds of design feed this chain. **Sequence diagrams** specify how orchestrators call collaborators — the structure of behaviour. **Decision tables** specify what pure functions return — the result of behaviour. Each kind has its own deterministic transformation, but both obey the same rule: every element of the design produces exactly one test, and the implementation is whatever makes those tests pass.
+Two kinds of design feed the chain:
 
-**What DisC controls:**
-DisC pins the contract — call order, arguments, and data flow for orchestrators; input-output behaviour for pure functions with a filled decision table.
+1. **Sequence diagrams** specify how orchestrators call collaborators — the structure of behaviour. DisC pins call order, arguments, and data flow.
+2. **Decision tables** specify what pure functions return — the result of behaviour. DisC pins the output at every listed row and the location of every declared `boundary`.
+
+Each kind has its own deterministic transformation; both obey one rule: every design element produces exactly one test, and the implementation is whatever makes those tests pass.
 
 **The two invariants** — every other rule derives from these:
 
@@ -22,6 +24,21 @@ DisC pins the contract — call order, arguments, and data flow for orchestrator
 2. **Implement from tests, not design.** The transformation has two phases separated by a wall. 
    - Phase 1 (design → tests) consumes the sequence diagrams and decision tables. 
    - Phase 2 (tests → implementation) reads only the tests. The design is never consulted during implementation. This two-phase wall ensures the implementation structure matches what the tests demand.
+
+Generated tests are **born green**: test and implementation are co-projected from one design, so a green build at generation time verifies faithful transcription, not design correctness. Their full regression value activates when the design changes (`regenerate:`, `extend:`) or code is hand-edited.
+
+**What DisC guarantees — and what stays yours:**
+
+| Artifact | DisC guarantees (enforced at) | Silently defaulted | You still own |
+|---|---|---|---|
+| Orchestrator — CREATE / REGEN | Call order, arguments, data flow (Step 5 checks 1–2; Step 8 build) | — | Diagram completeness and argument intent (checklist 1–2; REGEN: checklist 8) |
+| Filled leaf / variant — numeric inputs | Output at every listed row (Step 4); every declared `boundary`'s location (Step 1 bracketing; Step 6 pinning) | `optional_decision` defaults (see `language_profile`) | Thresholds never declared (checklist 7); the rows' business correctness |
+| Filled leaf / variant — finite inputs (enum, boolean) | Output at every listed row (Step 4) | `optional_decision` defaults | Coverage of every domain value (checklist 9); the rows' business correctness |
+| Skeleton leaf / variant | Compile-safe structure, TODO-marked (Step 5 pattern rules) | — | Every test case (checklist 4) |
+| Side-effect / factory leaf | Consumer wiring only (Step 5 check 1) | — | Internals — integration tests, outside DisC (`leaf_node` rule) |
+| Deferred participant — STUB | Interface + throwing stub, CI-greppable (Step 6 STUB rule) | — | The child `.puml` design — a later DisC run (Step 8 summary) |
+
+Never verified by DisC: that the design matches the business intent; a REUSE collaborator's semantics beyond its compile-checked signature.
 
 ## Concepts
 
@@ -656,6 +673,7 @@ Files:           [CREATE/UPDATE/STUB/REGEN labels per file]
 6. For each `sealed_family`, every permit's record file has the parent-implementation declaration and one override per parent behavior.
 7. Every threshold in the business rule appears in its decision table's `boundaries:`. A threshold that is not declared is not verified between rows — declare it and add its bracketing pair, then re-run.
 8. For each `regenerate:` orchestrator: diff its regenerated implementation and test against version control before committing. Regeneration assumes the orchestrator carried no hand-edits to preserve and that the diagram described its complete flow — confirm both.
+9. For every decision table with a finite-domain input column (enum, boolean): confirm the rows cover every value of that domain. An uncovered value is unconstrained — DisC does not check this.
 
 **Final steps:**
 1. Write files to disk per file mode
