@@ -29,11 +29,11 @@ Generated tests are **born green**: test and implementation are co-projected fro
 
 **What DisC guarantees — and what stays yours:**
 
-| Artifact | DisC guarantees (enforced at) | Silently defaulted | You still own |
+| Artifact | DisC guarantees (enforced at) | Defaulted (reported) | You still own |
 |---|---|---|---|
 | Orchestrator — CREATE / REGEN | Call order, arguments, data flow (Step 5 checks 1–2; Step 8 build) | — | Diagram completeness and argument intent (checklist 1–2; REGEN: checklist 8) |
-| Filled leaf / variant — numeric inputs | Output at every listed row (Step 4); every declared `boundary`'s location (Step 1 bracketing; Step 6 pinning) | `optional_decision` defaults (see `language_profile`) | Thresholds never declared (checklist 7); the rows' business correctness |
-| Filled leaf / variant — finite inputs (enum, boolean) | Output at every listed row (Step 4); coverage of every domain value (Step 1 `finite_domain_coverage`) | `optional_decision` defaults | The rows' business correctness; coverage when the type is unenumerable (checklist 9) |
+| Filled leaf / variant — numeric inputs | Output at every listed row (Step 4); every declared `boundary`'s location (Step 1 bracketing; Step 6 pinning) | `optional_decision` defaults (Step 8 `Applied defaults` line) | Thresholds never declared (checklist 7); the rows' business correctness |
+| Filled leaf / variant — finite inputs (enum, boolean) | Output at every listed row (Step 4); coverage of every domain value (Step 1 `finite_domain_coverage`) | `optional_decision` defaults (Step 8 `Applied defaults` line) | The rows' business correctness; coverage when the type is unenumerable (checklist 9) |
 | Skeleton leaf / variant | Compile-safe structure, TODO-marked (Step 5 pattern rules) | — | Every test case (checklist 4) |
 | Side-effect / factory leaf | Consumer wiring only (Step 5 check 1) | — | Internals — integration tests, outside DisC (`leaf_node` rule) |
 | Deferred participant — STUB | Interface + throwing stub, CI-greppable (Step 6 STUB rule) | — | The child `.puml` design — a later DisC run (Step 8 summary) |
@@ -319,7 +319,7 @@ A `pure function` leaf has decisions about behaviour that the rows may or may no
 - A **`required_decision`** is one DisC will not silently default. If the rows do not demonstrate it AND `config:` does not pin it, Step 1 refuses.
 - An **`optional_decision`** is one where DisC applies a documented default silently when the rows are silent.
 
-The lists of which specific decisions are `required_decision` vs `optional_decision` — and the default values for each `optional_decision` — are language-specific and enumerated in the `language_profile`. Defaults are documented once in the `language_profile`; they are not reported per run. Any default can be overridden via `config:`.
+The lists of which specific decisions are `required_decision` vs `optional_decision` — and the default values for each `optional_decision` — are language-specific and enumerated in the `language_profile`. The values are documented once in the `language_profile`, and every default the implementation actually depends on is reported on Step 8's `Applied defaults` line — a decision the design never made must at least be visible in the run that made it. Any default can be overridden via `config:`.
 
 ## Input
 
@@ -560,7 +560,7 @@ The implementation is a deterministic function of three inputs: the rows, the `c
 - For any `optional_decision` the rows and `config:` are silent on, apply the `language_profile`'s documented default.
 - Do NOT make judgment calls on a `required_decision`. If one is unspecified at this point, Step 1 failed to refuse — stop and re-check Step 1, do not paper over it here.
 
-Write the implementation using these values. There is no per-run audit log; the rules are fixed by the methodology and the `language_profile`.
+Write the implementation using these values, and record each `optional_decision` default the implementation depends on — Step 8 reports them on its `Applied defaults` line. The rules themselves are fixed by the methodology and the `language_profile`.
 
 **For participants with `participant_target = defer:<path>` (STUB mode):**
 
@@ -603,6 +603,7 @@ Entities:        [E_total] total ([R] record, [S] sealed-family, [N] enum, [I] i
 Sealed-family variants: [V] permits ([VF] filled from variant_decision_table, [VS] skeleton)
 Decision tables: [K] filled from decision_table_file, [Q] skeletons for humans to fill
 Boundaries:      [B] declared, all bracketed
+Applied defaults: [key=value per fired optional_decision, or none]
 Tests:           [N] verify_tests + [R] result_tests = [total] total
 Files:           [CREATE/UPDATE/STUB/REGEN labels per file]
 ```

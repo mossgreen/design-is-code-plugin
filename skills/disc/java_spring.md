@@ -799,7 +799,7 @@ Unknown `config:` keys cause Step 1 refusal — DisC will not silently ignore th
 | `scale` (without rounding) | Preserve input scale | `config: scale:` |
 | Whitespace | Preserve unless a row demonstrates a transformation | None — change a row instead |
 
-`config:` uses the YAML literal (e.g., `ROOT`); the implementation uses the Java constant (`Locale.ROOT`). Defaults are applied silently when rows and `config:` are silent; they are not reported per run.
+`config:` uses the YAML literal (e.g., `ROOT`); the implementation uses the Java constant (`Locale.ROOT`). Defaults apply when rows and `config:` are silent; every default the implementation depends on is reported on Step 8's `Applied defaults` line (e.g. `Applied defaults: locale=ROOT`).
 
 **Boundary declarations (`boundaries:`):**
 
@@ -905,7 +905,7 @@ class DefaultProductMapperTest {
 - Every `required_decision` (see the `config:` keys table above) MUST be either demonstrated by rows or pinned by `config:`. Otherwise Step 1 refuses.
 - Every declared `boundary` MUST be demonstrated by its bracketing pair (Step 1 enforces). The implementation's comparisons use the declared boundary values, with operators inferred from the bracketing rows.
 - Every finite-domain input column MUST cover its full domain (Step 1 enforces; see **Finite-domain coverage** above).
-- `optional_decision` behaviour is applied silently when rows and `config:` are silent. The full list and defaults are in the **Recognized `optional_decision` entries** table above.
+- `optional_decision` behaviour applies when rows and `config:` are silent; each default the implementation depends on is reported on Step 8's `Applied defaults` line. The full list and defaults are in the **Recognized `optional_decision` entries** table above.
 
 ---
 
@@ -1001,6 +1001,7 @@ Interactions:    1 entry + 4 collaborator = 5
 Orchestrators:   1 (ProductService)
 Leaf nodes:      3 total (1 pure function, 1 side effect, 1 factory)
 Decision tables: 0 filled from decision_table_file, 1 skeleton for humans to fill
+Applied defaults: none
 Tests:           4 verify_tests + 1 result_test = 5 total
 Files:           CREATE: ProductService, ProductServiceTest, DefaultProductService, DefaultProductServiceTest, ProductMapperTest (skeleton), Product, ProductDTO, SingleProductResponse
 ```
@@ -1386,6 +1387,7 @@ Arrows:          2 call_arrows parsed
 Orchestrators:   1 (ProductService)
 Leaf nodes:      2 total (1 pure function, 1 side effect, 0 factory)
 Decision tables: 1 filled from decision_table_file, 0 skeletons
+Applied defaults: none — whitespace is row-demonstrated; no locale-sensitive operations
 Tests:           2 verify_tests + 1 result_test + 3 filled leaf tests = 6 total
 ```
 
