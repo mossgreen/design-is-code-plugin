@@ -34,7 +34,7 @@ Generated tests are **born green**: test and implementation are co-projected fro
 |---|---|---|---|
 | Orchestrator — CREATE / REGEN | Call order, arguments, data flow (Step 5 checks 1–2; Step 8 build) | — | Diagram completeness and argument intent (checklist 1–2; REGEN: checklist 8) |
 | Filled leaf / variant — numeric inputs | Output at every listed row (Step 4); every declared `boundary`'s location (Step 1 bracketing; Step 6 pinning) | `optional_decision` defaults (Step 8 `Applied defaults` line) | Thresholds never declared (checklist 7); the rows' business correctness |
-| Filled leaf / variant — finite inputs (enum, boolean) | Output at every listed row (Step 4); coverage of every domain value (Step 1 `finite_domain_coverage`) | `optional_decision` defaults (Step 8 `Applied defaults` line) | The rows' business correctness; coverage when the type is unenumerable (checklist 9) |
+| Filled leaf / variant — finite inputs (enum, boolean) | Output at every listed row (Step 4); coverage of every domain value (Step 1 `finite_domain_coverage`) | `optional_decision` defaults (Step 8 `Applied defaults` line) | The rows' business correctness; unenumerable types and multi-column combinations (checklist 9) |
 | Skeleton leaf / variant | Compile-safe structure, TODO-marked (Step 5 pattern rules) | — | Every test case (checklist 4) |
 | Side-effect / factory leaf | Consumer wiring only (Step 5 check 1) | — | Internals — integration tests, outside DisC (`leaf_node` rule) |
 | Deferred participant — STUB | Interface + throwing stub, CI-greppable (Step 6 STUB rule) | — | The child `.puml` design — a later DisC run (Step 8 summary) |
@@ -79,7 +79,7 @@ What the human authors. The first artifacts in the chain.
 
 - **`boundary`** — A declared threshold on a numeric input column of a `decision_table_file`: a point in that input's domain where the expected behaviour changes (e.g. quantity ≥ 5 switches the discount tier). Declared in the table's frontmatter; syntactic form owned by the `language_profile`. Every declared `boundary` must be *demonstrated* by a **bracketing pair**: one row at the largest adjacent value below the boundary (adjacency per the `language_profile`'s rule for the column's type) and one row at exactly the boundary, all other input columns held equal, with differing expected outputs. Enforced at Step 1, pinned at Step 6; undeclared thresholds are checklist 7's duty (see Interpolation risk).
 
-- **`finite_domain_coverage`** — The finite-domain counterpart of `boundary`. An input column whose declared type has a finite domain (enum, boolean — the `language_profile` owns the list and how values are enumerated) must be **covered**: every value of the domain appears in at least one row. On a finite domain there is no between-rows space, so full coverage pins the behaviour completely. Nothing is declared — the domain is read from the type. Enforced at Step 1 (the refusal lists the missing values; a `throws:` row records a value the business rules out). A column whose type DisC cannot enumerate is exempt and falls to checklist 9.
+- **`finite_domain_coverage`** — The finite-domain counterpart of `boundary`. An input column whose declared type has a finite domain (enum, boolean — the `language_profile` owns the list and how values are enumerated) must be **covered**: every value of the domain appears in at least one row. Coverage closes the between-rows gap on that column — but it is **per column**: when a table has more than one finite column, combinations are pinned only where rows list them (checklist 9). Nothing is declared — the domain is read from the type. Enforced at Step 1 (the refusal lists the missing values; a `throws:` row records a value the business rules out). A column whose type DisC cannot enumerate is exempt and falls to checklist 9.
 
 #### Entity elements
 
@@ -334,7 +334,7 @@ $ARGUMENTS
 
 Execute these eight steps in order. Each step must be complete before the next begins. Report each step using its `### Step N: <name>` heading from below as the section label in your response.
 
-Two host-integration flags change what is emitted: `--plan` (Steps 1–6 as planning, JSON envelope, no files) and `--validate-only` (Step 1 only, strict verdict). Both are specified in **Execution modes (host integration)** after Step 8.
+Two host-integration flags change what is emitted: `--plan` (Steps 1–6 as planning, JSON envelope, no files) and `--validate-only` (Step 1 only, strict verdict). **If `$ARGUMENTS` contains either flag, read Execution modes (host integration) after Step 8 before doing anything — its output contract governs the entire response.**
 
 ### Step 1: Validate Design
 
@@ -619,8 +619,8 @@ Files:           [CREATE/UPDATE/STUB/REGEN labels per file]
 5. Each generated file's package matches the `target_placement` declared on its source design file.
 6. For each `sealed_family`, every permit's record file has the parent-implementation declaration and one override per parent behavior.
 7. Every threshold in the business rule appears in its decision table's `boundaries:`. A threshold that is not declared is not verified between rows — declare it and add its bracketing pair, then re-run.
-8. For each `regenerate:` orchestrator: confirm the diagram described its complete flow (an omitted `call_arrow` is an omitted call), and check the report's dropped-annotations note — any method-level concern the old implementation carried must move to class level, an aspect, or configuration.
-9. For every decision table with a finite-domain input column whose type DisC could not enumerate (not a boolean, not resolvable to a declared or readable enum): confirm the rows cover every value of that domain. Step 1's `finite_domain_coverage` check runs only on enumerable domains.
+8. For each `regenerate:` orchestrator: confirm the diagram described its complete flow (an omitted `call_arrow` is an omitted call), and check the report's dropped-annotations note — any method-level concern the old implementation carried must move to class level, an aspect, or configuration. On the **first** regeneration of a class DisC did not generate, diff the whole file against version control: legacy bodies may carry hand-authored statements (logging, inline guards) that are dropped silently — only annotations are reported.
+9. Finite-domain residuals Step 1 cannot check: (a) a column whose type DisC could not enumerate (not a boolean, not resolvable to a declared or readable enum) — confirm its rows cover every value; (b) a table with more than one finite column — coverage is per column, so confirm the listed combinations cover the business rule.
 
 **Final steps:**
 1. Write files to disk per file mode

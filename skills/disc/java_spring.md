@@ -488,7 +488,7 @@ For a participant with `participant_target = regenerate:<fqn>` (`<<@regen:fqn>>`
 
 **Collaborators and leaves are never touched** by this participant's REGEN — each follows its own `participant_target` (CREATE / REUSE / UPDATE / STUB).
 
-**Cross-cutting concerns.** A regenerable orchestrator's method bodies contain only design-derived calls; `@Transactional`, tracing, metrics, and guards belong at class level, in an aspect, or in configuration. Before overwriting, REGEN reads the existing implementation and reproduces its **class-level annotations** (e.g. `@Service`, `@Transactional`) on the regenerated class verbatim. **Method-level annotations are not preserved** — the design owns method bodies. Every dropped method-level annotation is listed in the Step 8 report (`method-level annotations dropped:`); move it to class level, an aspect, or configuration before committing.
+**Cross-cutting concerns.** A regenerable orchestrator's method bodies contain only design-derived calls; `@Transactional`, tracing, metrics, and guards belong at class level, in an aspect, or in configuration. Before overwriting, REGEN reads the existing implementation and reproduces its **class-level annotations** (e.g. `@Service`, `@Transactional`) on the regenerated class verbatim. **Method-level annotations are not preserved** — the design owns method bodies. Every dropped method-level annotation is listed in the Step 8 report (`method-level annotations dropped:`); move it to class level, an aspect, or configuration before committing. Only annotations are tracked — hand-authored body *statements* (logging, inline guards) in a legacy class are dropped without appearing in the report, which is why the first regeneration of a class DisC did not generate carries a full-diff duty (SKILL.md checklist 8).
 
 REGEN is the inverse of UPDATE's add-only rule, allowed for exactly one reason: an orchestrator's implementation is *fully determined* by its design, so overwriting it preserves nothing a human authored. The cross-cutting rule above makes that premise true by construction rather than by convention. This is false for `leaf_node`s — their content is sampled and human-owned — which is why Step 1 refuses `regenerate:` on a leaf.
 
@@ -854,7 +854,7 @@ A finite-domain input column is one whose declared `input:` type enumerates comp
 - `boolean` / `Boolean` — domain `{true, false}`.
 - An enum — declared `<<enum>>` in the `entity_prelude` (domain = its listed values), or a REUSE enum whose values are read from the existing `.java` source.
 
-Rule: every value of the domain appears in at least one row. On a finite domain there is no between-rows space, so full coverage pins the behaviour completely — no `boundaries:`-style declaration is needed; the domain is read from the type. A value the business rules out is still covered, by a `throws:` row.
+Rule: every value of the domain appears in at least one row. Coverage closes the between-rows gap on that column — no `boundaries:`-style declaration is needed; the domain is read from the type. Coverage is **per column**: combinations of several finite columns are pinned only where rows list them (SKILL.md checklist 9). A value the business rules out is still covered, by a `throws:` row.
 
 Refusal (Step 1) when a value is missing, e.g.: `input column 'kind' has finite domain {KIND_A, KIND_B, KIND_C}; rows cover {KIND_A, KIND_B} — add a row for KIND_C (a throws: row if the value is unreachable).`
 
