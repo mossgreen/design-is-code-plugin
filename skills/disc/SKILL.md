@@ -24,6 +24,7 @@ Each kind has its own deterministic transformation; both obey one rule: every de
 2. **Implement from tests, not design.** The transformation has two phases separated by a wall.
    - Phase 1 (design → tests) consumes the sequence diagrams and decision tables.
    - Phase 2 (tests → implementation) reads only the tests. The design is never consulted during implementation. This two-phase wall ensures the implementation structure matches what the tests demand.
+   - Within a single generation context the wall is a discipline, not a mechanism — the mind that read the design also writes the implementation. Hosts can make it mechanical by running Phase 2 in a separate context that receives only the tests.
 
 Generated tests are **born green**: test and implementation are co-projected from one design, so a green build at generation time verifies faithful transcription, not design correctness. Their full regression value activates when the design changes (`regenerate:`, `extend:`) or code is hand-edited.
 
