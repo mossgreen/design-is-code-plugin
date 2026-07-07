@@ -846,6 +846,18 @@ config:
 
 Rows 4/5 bracket the first boundary and rows 9/10 the second — each pair holds `lineSubtotal` equal so the output change is attributable to crossing the boundary alone. Without `boundaries:`, the same table would pass Step 1, but an implementation switching tiers at quantity 6 would also pass it — the tier cuts would be unverified between rows.
 
+**Finite-domain coverage (`finite_domain_coverage`):**
+
+A finite-domain input column is one whose declared `input:` type enumerates completely:
+- `boolean` / `Boolean` — domain `{true, false}`.
+- An enum — declared `<<enum>>` in the `entity_prelude` (domain = its listed values), or a REUSE enum whose values are read from the existing `.java` source.
+
+Rule: every value of the domain appears in at least one row. On a finite domain there is no between-rows space, so full coverage pins the behaviour completely — no `boundaries:`-style declaration is needed; the domain is read from the type. A value the business rules out is still covered, by a `throws:` row.
+
+Refusal (Step 1) when a value is missing, e.g.: `input column 'kind' has finite domain {KIND_A, KIND_B, KIND_C}; rows cover {KIND_A, KIND_B} — add a row for KIND_C (a throws: row if the value is unreachable).`
+
+Exempt: a column whose type DisC cannot enumerate (not a boolean, not resolvable to a declared or readable enum). Coverage for exempt columns stays with the human — SKILL.md checklist 9.
+
 **Row conventions:**
 - String literals quoted: `"Widget"`. Whitespace inside the quotes is meaningful.
 - Numeric literals unquoted: `10.00`, `-50`.
@@ -892,6 +904,7 @@ class DefaultProductMapperTest {
 - No TODO markers. Every row is concrete.
 - Every `required_decision` (see the `config:` keys table above) MUST be either demonstrated by rows or pinned by `config:`. Otherwise Step 1 refuses.
 - Every declared `boundary` MUST be demonstrated by its bracketing pair (Step 1 enforces). The implementation's comparisons use the declared boundary values, with operators inferred from the bracketing rows.
+- Every finite-domain input column MUST cover its full domain (Step 1 enforces; see **Finite-domain coverage** above).
 - `optional_decision` behaviour is applied silently when rows and `config:` are silent. The full list and defaults are in the **Recognized `optional_decision` entries** table above.
 
 ---

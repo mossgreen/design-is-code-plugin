@@ -33,7 +33,7 @@ Generated tests are **born green**: test and implementation are co-projected fro
 |---|---|---|---|
 | Orchestrator — CREATE / REGEN | Call order, arguments, data flow (Step 5 checks 1–2; Step 8 build) | — | Diagram completeness and argument intent (checklist 1–2; REGEN: checklist 8) |
 | Filled leaf / variant — numeric inputs | Output at every listed row (Step 4); every declared `boundary`'s location (Step 1 bracketing; Step 6 pinning) | `optional_decision` defaults (see `language_profile`) | Thresholds never declared (checklist 7); the rows' business correctness |
-| Filled leaf / variant — finite inputs (enum, boolean) | Output at every listed row (Step 4) | `optional_decision` defaults | Coverage of every domain value (checklist 9); the rows' business correctness |
+| Filled leaf / variant — finite inputs (enum, boolean) | Output at every listed row (Step 4); coverage of every domain value (Step 1 `finite_domain_coverage`) | `optional_decision` defaults | The rows' business correctness; coverage when the type is unenumerable (checklist 9) |
 | Skeleton leaf / variant | Compile-safe structure, TODO-marked (Step 5 pattern rules) | — | Every test case (checklist 4) |
 | Side-effect / factory leaf | Consumer wiring only (Step 5 check 1) | — | Internals — integration tests, outside DisC (`leaf_node` rule) |
 | Deferred participant — STUB | Interface + throwing stub, CI-greppable (Step 6 STUB rule) | — | The child `.puml` design — a later DisC run (Step 8 summary) |
@@ -77,6 +77,8 @@ What the human authors. The first artifacts in the chain.
 - **`variant_decision_table`** — A `decision_table_file` whose `target: Variant.method` resolves to a permit record's override of a `sealed_family` behavior. Distinct pairing rule from the standard `decision_table_file` → `pure function` leaf pairing (see Step 2.8): the target resolves to an *entity permit*, not a *leaf participant*. When attached, the variant's override body is filled from rows; when absent, the override is generated in skeleton mode (throws a marker exception; a skeleton test is emitted).
 
 - **`boundary`** — A declared threshold on a numeric input column of a `decision_table_file`: a point in that input's domain where the expected behaviour changes (e.g. quantity ≥ 5 switches the discount tier). Declared in the table's frontmatter; syntactic form owned by the `language_profile`. Every declared `boundary` must be *demonstrated* by a **bracketing pair**: one row at the largest adjacent value below the boundary (adjacency per the `language_profile`'s rule for the column's type) and one row at exactly the boundary, all other input columns held equal, with differing expected outputs. Enforced at Step 1, pinned at Step 6; undeclared thresholds are checklist 7's duty (see Interpolation risk).
+
+- **`finite_domain_coverage`** — The finite-domain counterpart of `boundary`. An input column whose declared type has a finite domain (enum, boolean — the `language_profile` owns the list and how values are enumerated) must be **covered**: every value of the domain appears in at least one row. On a finite domain there is no between-rows space, so full coverage pins the behaviour completely. Nothing is declared — the domain is read from the type. Enforced at Step 1 (the refusal lists the missing values; a `throws:` row records a value the business rules out). A column whose type DisC cannot enumerate is exempt and falls to checklist 9.
 
 #### Entity elements
 
@@ -281,7 +283,7 @@ When AI invents both a leaf's test cases and its implementation, the pair can ag
 
 Decision-table rows constrain output only at the inputs they list. Between rows, the algorithm is unconstrained: rows at quantity 4 and quantity 10 with different discount tiers admit an implementation that switches tiers anywhere from 5 to 10 — every such implementation passes the table. The structural guarantee that holds for orchestrators ("only one implementation passes") does not extend to the space between rows.
 
-Prevention: declare every threshold as a `boundary` and demonstrate it with a bracketing pair (Step 1 enforces; Step 6 pins the comparisons). A threshold never declared is never verified between rows — checklist 7 (numeric) and checklist 9 (finite domains) carry that residual duty.
+Prevention: declare every threshold as a `boundary` and demonstrate it with a bracketing pair (Step 1 enforces; Step 6 pins the comparisons). A threshold never declared is never verified between rows — checklist 7's duty. Finite-domain columns have no between-rows space: `finite_domain_coverage` requires every value to have a row.
 
 ### Dual testing
 
@@ -353,6 +355,7 @@ Use the disambiguation rules ("Distinguishing `call_arrow` from `return_arrow`")
 - Exception rows are well-formed: output cell is `throws: <ExceptionType>` (optionally `: "<message>"`).
 - At least one row exists.
 - When `boundaries:` is declared: every key resolves to a declared numeric `input.*` column, and every declared `boundary` value has its bracketing pair of rows (adjacency per the `language_profile`): one row at the largest adjacent value below the boundary and one row at exactly the boundary, all other input columns equal, expected outputs differing.
+- Every finite-domain input column satisfies `finite_domain_coverage`: each value of its domain appears in at least one row. Columns whose type DisC cannot enumerate (per the `language_profile`) are exempt.
 
 **Refusal protocol** — if any element is unsupported or ambiguous:
 
@@ -374,6 +377,7 @@ Refuse when:
 - A `decision_table_file` leaves a `required_decision` unspecified AND `config:` does not pin it. The refusal message names the decision and instructs the human to either (a) add a row that demonstrates the choice, or (b) add the corresponding `config:` key (see the `language_profile` for the recognized key for each decision).
 - A `boundaries:` key does not resolve to a declared numeric `input.*` column.
 - A declared `boundary` has no bracketing pair. The refusal names the boundary and lists the exact missing row(s) — e.g. "boundary `quantity: 5` needs a row at `quantity = 4` and a row at `quantity = 5` with all other inputs equal and differing expected outputs."
+- A finite-domain input column leaves one or more domain values uncovered. The refusal names the column, its domain, and the missing values, and suggests one row per missing value (a `throws:` row for a value the business rules out).
 
 *Participant stereotype:*
 - A `participant_target` stereotype is malformed: empty FQN (`<<@class:>>`), or a `+method` listed in an `extend:` form whose name does not appear as a `call_arrow` callee method on this participant in any UML in the input set.
@@ -525,6 +529,7 @@ Before writing anything, pass every check. Fix generated code if any check fails
    - Filled decision-table tests have no TODO markers — every row produces a concrete test
    - For each filled `decision_table_file`, every `required_decision` is either demonstrated by rows or pinned by `config:`. (If it isn't, Step 1 should have refused — this is a belt-and-braces check.)
    - Every declared `boundary` has its bracketing pair (belt-and-braces — Step 1 should have refused), and one generated test exists per bracketing row like any other row
+   - Every finite-domain input column is fully covered by rows (belt-and-braces — Step 1 should have refused)
    - `pure function` leaves both mocked in consumer AND get standalone tests (dual testing); `side effect` and `factory` leaves have no standalone test
    - Each `branch_block` has one `test_group` per branch with branch-specific `stub` setup
    - `loop_block` test data uses single-element collection
@@ -611,7 +616,7 @@ Files:           [CREATE/UPDATE/STUB/REGEN labels per file]
 6. For each `sealed_family`, every permit's record file has the parent-implementation declaration and one override per parent behavior.
 7. Every threshold in the business rule appears in its decision table's `boundaries:`. A threshold that is not declared is not verified between rows — declare it and add its bracketing pair, then re-run.
 8. For each `regenerate:` orchestrator: diff its regenerated implementation and test against version control before committing. Regeneration assumes the orchestrator carried no hand-edits to preserve and that the diagram described its complete flow — confirm both.
-9. For every decision table with a finite-domain input column (enum, boolean): confirm the rows cover every value of that domain. An uncovered value is unconstrained — DisC does not check this.
+9. For every decision table with a finite-domain input column whose type DisC could not enumerate (not a boolean, not resolvable to a declared or readable enum): confirm the rows cover every value of that domain. Step 1's `finite_domain_coverage` check runs only on enumerable domains.
 
 **Final steps:**
 1. Write files to disk per file mode
