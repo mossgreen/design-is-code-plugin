@@ -488,7 +488,9 @@ For a participant with `participant_target = regenerate:<fqn>` (`<<@regen:fqn>>`
 
 **Collaborators and leaves are never touched** by this participant's REGEN — each follows its own `participant_target` (CREATE / REUSE / UPDATE / STUB).
 
-REGEN is the inverse of UPDATE's add-only rule, allowed for exactly one reason: an orchestrator's implementation is *fully determined* by its design, so overwriting it preserves nothing a human authored. This is false for `leaf_node`s — their content is sampled and human-owned — which is why Step 1 refuses `regenerate:` on a leaf.
+**Cross-cutting concerns.** A regenerable orchestrator's method bodies contain only design-derived calls; `@Transactional`, tracing, metrics, and guards belong at class level, in an aspect, or in configuration. Before overwriting, REGEN reads the existing implementation and reproduces its **class-level annotations** (e.g. `@Service`, `@Transactional`) on the regenerated class verbatim. **Method-level annotations are not preserved** — the design owns method bodies. Every dropped method-level annotation is listed in the Step 8 report (`method-level annotations dropped:`); move it to class level, an aspect, or configuration before committing.
+
+REGEN is the inverse of UPDATE's add-only rule, allowed for exactly one reason: an orchestrator's implementation is *fully determined* by its design, so overwriting it preserves nothing a human authored. The cross-cutting rule above makes that premise true by construction rather than by convention. This is false for `leaf_node`s — their content is sampled and human-owned — which is why Step 1 refuses `regenerate:` on a leaf.
 
 **Precondition:** the diagram must describe the orchestrator's complete flow. A `call_arrow` the design omits is dropped from the regenerated implementation. The host that emits the `.puml` owns completeness; the operator verifies each regenerated file against version control (Step 8).
 
@@ -525,7 +527,7 @@ Step 3 outcomes:
 | `InternationalTax`      | (new permit)         | CREATE | `InternationalTax.java` — skeleton override; human fills |
 | `DomesticTax`           | `existing:...`       | REUSE  | none — leaf untouched |
 
-`DefaultSaleService` is rewritten to inject `TaxCalculatorResolver`, call `resolve(...)`, then dispatch to the returned `TaxCalculator` — its old direct call to `DomesticTax` is gone because the new design replaces it. `DomesticTax`'s own logic is never touched. Per Step 8, diff `DefaultSaleService` against version control before committing.
+`DefaultSaleService` is rewritten to inject `TaxCalculatorResolver`, call `resolve(...)`, then dispatch to the returned `TaxCalculator` — its old direct call to `DomesticTax` is gone because the new design replaces it. `DomesticTax`'s own logic is never touched. Class-level annotations on the old `DefaultSaleService` are reproduced; per Step 8, confirm the diagram described the complete flow and check the dropped-annotations note before committing.
 
 **`<fqn>` resolves to a class.** If `SaleService` were a bare `@Service` class at `com.example.sale.SaleService` (no separate interface — the usual shape for code DisC did not generate), the stereotype is identical: `<<@regen:com.example.sale.SaleService>>`. The FQN resolves to a class, so REGEN overwrites `SaleService.java` and `SaleServiceTest.java` directly, preserving `createSale`'s public signature exactly. Everything else in the example is unchanged.
 

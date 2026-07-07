@@ -128,7 +128,7 @@ Derived facts about the design, computed before tests are generated.
   - **`existing:<fqn>`**: this participant is already implemented at the fully-qualified name `<fqn>`. DisC does not generate files for it; it appears only as a `collaborator` mock and constructor parameter. A participant declared as `existing` must have no outgoing `call_arrow`s (REUSE means as-is — no behavioural change).
   - **`extend:<fqn>:+method1,+method2,...`**: this participant exists at `<fqn>` but the design adds the listed methods. DisC opens the existing files (interface, implementation, test) in UPDATE mode and adds only the listed signatures.
   - **`defer:<relative_puml_path>`**: this participant is called by the SUT but its internals have not yet been designed; design them later in their own `.puml` at the given path. DisC generates the interface plus a throwing stub-implementation now, with no test class and no decision table. The actual implementation will come from running DisC on the child `.puml`. Like `existing:`, a `defer:` participant must have no outgoing `call_arrow`s in *this* diagram — its outgoing calls live in its own `.puml`. The path is optional in the stereotype; absent, the profile defaults to a sibling-folder convention (see `language_profile`).
-  - **`regenerate:<fqn>`**: this participant exists at `<fqn>` and is an `orchestrator` (it has outgoing `call_arrow`s) whose design has changed. DisC overwrites its implementation and test **wholesale** from the current design — not add-only — because an orchestrator's implementation is fully determined by its design (structure is determined), so it is a pure artifact with nothing hand-authored to preserve. Its `collaborator`s — especially `leaf_node`s — are never overwritten; they follow their own `participant_target`. This is what keeps *design is the source* true after the first generation: when an orchestrator's design changes, the artifact is regenerated, not hand-patched. Unlike `existing:` and `defer:`, a `regenerate:` participant MUST have outgoing `call_arrow`s. Because regeneration overwrites from the design, the diagram MUST describe this orchestrator's complete flow — every `call_arrow` it makes — or the regenerated implementation will omit the missing calls (see Step 7).
+  - **`regenerate:<fqn>`**: this participant exists at `<fqn>` and is an `orchestrator` (it has outgoing `call_arrow`s) whose design has changed. DisC overwrites its implementation and test **wholesale** from the current design — not add-only — because an orchestrator's implementation is fully determined by its design (structure is determined), so it is a pure artifact with nothing hand-authored to preserve. For that premise to hold by construction, a regenerable orchestrator keeps cross-cutting concerns — transactions, tracing, metrics, guards — out of its method bodies: at class level, in aspects, or in configuration (placement rules owned by the `language_profile`); a concern hand-edited into a method body is lost on regeneration. Its `collaborator`s — especially `leaf_node`s — are never overwritten; they follow their own `participant_target`. This is what keeps *design is the source* true after the first generation: when an orchestrator's design changes, the artifact is regenerated, not hand-patched. Unlike `existing:` and `defer:`, a `regenerate:` participant MUST have outgoing `call_arrow`s. Because regeneration overwrites from the design, the diagram MUST describe this orchestrator's complete flow — every `call_arrow` it makes — or the regenerated implementation will omit the missing calls (see Step 7).
 
   Exactly one form per participant. The syntactic form of the stereotype is owned by the `language_profile`. The abstract concept defines what each declaration *means*; the profile defines how it *looks* in the diagram.
 
@@ -587,6 +587,8 @@ The sealed parent itself has no implementation file beyond its parent declaratio
 
 **Complete-design precondition for REGEN:** regeneration derives the implementation from the design, so the diagram must describe the orchestrator's complete flow — a `call_arrow` the design omits will be absent from the regenerated implementation. The host that emits the design owns completeness; Step 8 surfaces the residual review duty.
 
+**Cross-cutting precondition for REGEN:** method bodies contain only design-derived calls; cross-cutting concerns live at class level, in aspects, or in configuration. The `language_profile` preserves class-level annotations across the overwrite, and Step 8 lists any method-level annotations that were dropped.
+
 Use the `language_profile`'s UPDATE and REGEN mode rules per file type.
 
 ### Step 8: Report
@@ -598,7 +600,7 @@ Interactions:    [E] entry + [N] collaborator = [total]
 Orchestrators:   [N] participants with outgoing arrows
 Leaf nodes:      [M] total ([P] pure function, [S] side effect, [F] factory)
 Deferred:        [D] participants stubbed; child .puml paths: [paths]
-Regenerated:     [G] orchestrators overwritten wholesale: [names]
+Regenerated:     [G] orchestrators overwritten wholesale: [names]; method-level annotations dropped: [list, or none]
 Entities:        [E_total] total ([R] record, [S] sealed-family, [N] enum, [I] interface, [C] class; [X] REUSE)
 Sealed-family variants: [V] permits ([VF] filled from variant_decision_table, [VS] skeleton)
 Decision tables: [K] filled from decision_table_file, [Q] skeletons for humans to fill
@@ -616,7 +618,7 @@ Files:           [CREATE/UPDATE/STUB/REGEN labels per file]
 5. Each generated file's package matches the `target_placement` declared on its source design file.
 6. For each `sealed_family`, every permit's record file has the parent-implementation declaration and one override per parent behavior.
 7. Every threshold in the business rule appears in its decision table's `boundaries:`. A threshold that is not declared is not verified between rows — declare it and add its bracketing pair, then re-run.
-8. For each `regenerate:` orchestrator: diff its regenerated implementation and test against version control before committing. Regeneration assumes the orchestrator carried no hand-edits to preserve and that the diagram described its complete flow — confirm both.
+8. For each `regenerate:` orchestrator: confirm the diagram described its complete flow (an omitted `call_arrow` is an omitted call), and check the report's dropped-annotations note — any method-level concern the old implementation carried must move to class level, an aspect, or configuration.
 9. For every decision table with a finite-domain input column whose type DisC could not enumerate (not a boolean, not resolvable to a declared or readable enum): confirm the rows cover every value of that domain. Step 1's `finite_domain_coverage` check runs only on enumerable domains.
 
 **Final steps:**
