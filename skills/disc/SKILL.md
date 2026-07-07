@@ -456,15 +456,7 @@ Identify which concepts apply:
 | **side effect** | Touches external systems (DB, network, clock, queue, etc.) | Mocked in consumer only — no standalone test |
 | **factory** | Name ends in `Factory` | No standalone test — assumed pass-through constructor |
 
-6.5. Read the `participant_target` declared on each `participant`. Parse the stereotype using the `language_profile`'s notation. Record each participant's `participant_target` as one of:
-
-- `create` (no stereotype, or explicit `create`) — the default; DisC will generate this participant's interface, implementation, and test in Step 3 onwards.
-- `existing:<fqn>` — DisC will not generate files; the participant is referenced only as a `collaborator`.
-- `extend:<fqn>:+method1,+method2,...` — DisC will open the existing files at `<fqn>` in UPDATE mode and add the listed `+method` signatures.
-- `defer:<relative_puml_path>` — DisC will generate the interface and a throwing stub-implementation (per the `language_profile`), but no test class and no decision table. The actual implementation comes from a later DisC run on the child `.puml` at the given path.
-- `regenerate:<fqn>` — DisC will overwrite the orchestrator's implementation and test at `<fqn>` wholesale from the current design (REGEN mode in Step 3f); its `collaborator`s are untouched.
-
-Refusals for malformed stereotypes, `existing` or `defer` participants with outgoing arrows, a `regenerate` participant with no outgoing arrows or pointing at a non-existent file, entry-interaction targets that are deferred, multiple stereotypes on one participant, and unmatched `+method` lists belong to Step 1 — by this point they have already been ruled out.
+6.5. Read the `participant_target` declared on each `participant` and record it — one of the five forms defined in Composition (`create`, `existing:`, `extend:`, `defer:`, `regenerate:`), parsed per the `language_profile`'s notation. Step 3f maps each form to its file mode. Malformed or contradictory stereotypes were already refused in Step 1.
 
 7. Pair each `decision_table_file` with its target `pure function` leaf:
    - Parse the `target: Class.method` frontmatter field.
