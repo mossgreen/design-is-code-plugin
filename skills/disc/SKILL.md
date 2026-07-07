@@ -331,53 +331,7 @@ $ARGUMENTS
 
 Execute these eight steps in order. Each step must be complete before the next begins. Report each step using its `### Step N: <name>` heading from below as the section label in your response.
 
-### Plan mode (dry-run)
-
-When `$ARGUMENTS` contains the token `--plan`, DisC executes Steps 1 through 6 as planning only and emits a single JSON object to stdout in place of Steps 7 and 8. **No files are written. No file-writing tool is invoked.** Plan mode lets host tools (e.g., DisC Studio) render a preview-before-apply panel.
-
-The JSON envelope:
-
-```json
-{
-  "actions": [
-    {
-      "type": "CREATE" | "UPDATE" | "REUSE",
-      "path": "<language-profile-path>/X.<ext>",
-      "participant": "X",
-      "reason": "string explanation",
-      "addedMethods": ["m1", "m2"]
-    }
-  ],
-  "warnings": [
-    "<CollaboratorName>.<methodName> signature mismatch — using catalog form"
-  ],
-  "summary": {
-    "create": 3, "update": 1, "reuse": 2,
-    "verifyTests": 4, "resultTests": 1, "decisionTables": 0
-  }
-}
-```
-
-- `type: "CREATE"` — file does not exist (or `participant_target` is `create`); plan would `Write` it.
-- `type: "UPDATE"` — file exists (or `participant_target` is `extend:...`); plan would `Edit` it. `addedMethods` lists what would be added.
-- `type: "REUSE"` — `participant_target` is `existing:<fqn>` or the participant resolves to an already-correct file with no additions. Plan would not touch this file. Include the row so the host can show "we'll use your existing X as-is".
-
-The envelope is the **only** thing emitted on stdout in plan mode. Steps 1–6 are reasoned about internally; no per-step narration is printed. The exit code is 0 on success and non-zero with a JSON error envelope (`{"error": "..."}`) on refusal.
-
-When `--plan` is absent, the pipeline runs normally and produces Steps 1–8 narration plus written files.
-
-### Validate mode
-
-When `$ARGUMENTS` contains the token `--validate-only`, DisC executes **Step 1 only** (the refusal-grade contract checks) and exits. **No files are written. No file-writing tool is invoked.** No tests, no implementation, no plan envelope — only the verdict on whether the design is shaped well enough to feed into Steps 2–6. Validate mode lets host tools (e.g., DisC Studio) preflight the design at authoring time before the user commits to a full run.
-
-**Strict-output rule** — exactly as in plan mode, Step 1 is reasoned about internally; **no per-step narration, no markdown headings, no "Validation Results" prose, no checklist of which rules passed**. The stdout contract is one of exactly two shapes:
-
-- **On Step 1 pass:** the literal single line `{"ok": true}` — nothing before it, nothing after it. Exit code 0.
-- **On Step 1 refusal:** the standard `#### REFUSAL — STOP` markdown block exactly as defined in the Step 1 refusal protocol below — same wording, same EXPLAIN + SUGGEST sections, same exit code (non-zero). Host tools render this verbatim.
-
-Any other output (progress narration, partial summaries, "let me check…" preambles) is a contract violation that host tools cannot parse. Run the checks silently; emit only the verdict.
-
-When `--validate-only` is absent and `--plan` is absent, the pipeline runs normally. When both flags are present, `--validate-only` wins (it is a strict subset of `--plan`).
+Two host-integration flags change what is emitted: `--plan` (Steps 1–6 as planning, JSON envelope, no files) and `--validate-only` (Step 1 only, strict verdict). Both are specified in **Execution modes (host integration)** after Step 8.
 
 ### Step 1: Validate Design
 
@@ -664,3 +618,53 @@ Files:           [CREATE/UPDATE/STUB/REGEN labels per file]
 2. Run the `language_profile`'s build command
 3. If tests fail: read error, fix, re-run
 4. Report files and test results
+
+## Execution modes (host integration)
+
+### Plan mode (dry-run)
+
+When `$ARGUMENTS` contains the token `--plan`, DisC executes Steps 1 through 6 as planning only and emits a single JSON object to stdout in place of Steps 7 and 8. **No files are written. No file-writing tool is invoked.** Plan mode lets host tools (e.g., DisC Studio) render a preview-before-apply panel.
+
+The JSON envelope:
+
+```json
+{
+  "actions": [
+    {
+      "type": "CREATE" | "UPDATE" | "REUSE",
+      "path": "<language-profile-path>/X.<ext>",
+      "participant": "X",
+      "reason": "string explanation",
+      "addedMethods": ["m1", "m2"]
+    }
+  ],
+  "warnings": [
+    "<CollaboratorName>.<methodName> signature mismatch — using catalog form"
+  ],
+  "summary": {
+    "create": 3, "update": 1, "reuse": 2,
+    "verifyTests": 4, "resultTests": 1, "decisionTables": 0
+  }
+}
+```
+
+- `type: "CREATE"` — file does not exist (or `participant_target` is `create`); plan would `Write` it.
+- `type: "UPDATE"` — file exists (or `participant_target` is `extend:...`); plan would `Edit` it. `addedMethods` lists what would be added.
+- `type: "REUSE"` — `participant_target` is `existing:<fqn>` or the participant resolves to an already-correct file with no additions. Plan would not touch this file. Include the row so the host can show "we'll use your existing X as-is".
+
+The envelope is the **only** thing emitted on stdout in plan mode. Steps 1–6 are reasoned about internally; no per-step narration is printed. The exit code is 0 on success and non-zero with a JSON error envelope (`{"error": "..."}`) on refusal.
+
+When `--plan` is absent, the pipeline runs normally and produces Steps 1–8 narration plus written files.
+
+### Validate mode
+
+When `$ARGUMENTS` contains the token `--validate-only`, DisC executes **Step 1 only** (the refusal-grade contract checks) and exits. **No files are written. No file-writing tool is invoked.** No tests, no implementation, no plan envelope — only the verdict on whether the design is shaped well enough to feed into Steps 2–6. Validate mode lets host tools (e.g., DisC Studio) preflight the design at authoring time before the user commits to a full run.
+
+**Strict-output rule** — exactly as in plan mode, Step 1 is reasoned about internally; **no per-step narration, no markdown headings, no "Validation Results" prose, no checklist of which rules passed**. The stdout contract is one of exactly two shapes:
+
+- **On Step 1 pass:** the literal single line `{"ok": true}` — nothing before it, nothing after it. Exit code 0.
+- **On Step 1 refusal:** the standard `#### REFUSAL — STOP` markdown block exactly as defined in the Step 1 refusal protocol — same wording, same EXPLAIN + SUGGEST sections, same exit code (non-zero). Host tools render this verbatim.
+
+Any other output (progress narration, partial summaries, "let me check…" preambles) is a contract violation that host tools cannot parse. Run the checks silently; emit only the verdict.
+
+When `--validate-only` is absent and `--plan` is absent, the pipeline runs normally. When both flags are present, `--validate-only` wins (it is a strict subset of `--plan`).
