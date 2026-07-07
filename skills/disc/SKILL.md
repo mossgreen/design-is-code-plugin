@@ -21,8 +21,8 @@ Each kind has its own deterministic transformation; both obey one rule: every de
 
 1. **Design element = Test.** Every `call_arrow` in a sequence diagram becomes exactly one `verify_test`. Every row in a `decision_table_file` becomes exactly one leaf test. The count of design elements must equal the count of generated tests.
 
-2. **Implement from tests, not design.** The transformation has two phases separated by a wall. 
-   - Phase 1 (design → tests) consumes the sequence diagrams and decision tables. 
+2. **Implement from tests, not design.** The transformation has two phases separated by a wall.
+   - Phase 1 (design → tests) consumes the sequence diagrams and decision tables.
    - Phase 2 (tests → implementation) reads only the tests. The design is never consulted during implementation. This two-phase wall ensures the implementation structure matches what the tests demand.
 
 Generated tests are **born green**: test and implementation are co-projected from one design, so a green build at generation time verifies faithful transcription, not design correctness. Their full regression value activates when the design changes (`regenerate:`, `extend:`) or code is hand-edited.
@@ -104,7 +104,7 @@ Each `participant` plays one of two roles. The role determines instantiation, mo
 
 - **`collaborator`** — Every other `participant`. Mocked in tests. Injected into the `component_under_test` via its constructor.
 
-### Composes calls vs terminal
+### Call-graph role
 
 Classifies each `participant` by its relationship to the call graph. Determines test style.
 
