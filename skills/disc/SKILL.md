@@ -448,13 +448,7 @@ Identify which concepts apply:
 3. For `component_under_test` and `collaborator` participants, sub-classify by call-graph role: `orchestrator` (has outgoing `call_arrow`s) or `leaf_node` (no outgoing `call_arrow`s).
 4. List all `call_arrow`s → each is an `interaction`. The entry interaction (caller = `system_caller`) is counted but produces no `verify_test`.
 5. Identify `loop_block`s, `branch_block`s, `throw_arrow`s.
-6. Sub-classify each `leaf_node` by asking: *does its output depend only on inputs, does it touch the world, or is it a pass-through factory?*
-
-| Sub-kind | Identified by | DisC action |
-|---|---|---|
-| **pure function** | Output depends only on inputs | `decision_table` skeleton (human fills in) — or filled rows when a `decision_table_file` is attached |
-| **side effect** | Touches external systems (DB, network, clock, queue, etc.) | Mocked in consumer only — no standalone test |
-| **factory** | Name ends in `Factory` | No standalone test — assumed pass-through constructor |
+6. Sub-classify each `leaf_node` by asking: *does its output depend only on inputs, does it touch the world, or is it a pass-through factory?* The sub-kind table — identification signals and DisC's action per sub-kind — is in the `leaf_node` transformation rule.
 
 6.5. Read the `participant_target` declared on each `participant` and record it — one of the five forms defined in Composition (`create`, `existing:`, `extend:`, `defer:`, `regenerate:`), parsed per the `language_profile`'s notation. Step 3f maps each form to its file mode. Malformed or contradictory stereotypes were already refused in Step 1.
 
