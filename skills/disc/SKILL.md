@@ -318,7 +318,7 @@ When a `throw_arrow` is present, the method-under-test is called at different pl
 A `pure function` leaf has decisions about behaviour that the rows may or may not pin down.
 
 - A **`required_decision`** is one DisC will not silently default. If the rows do not demonstrate it AND `config:` does not pin it, Step 1 refuses.
-- An **`optional_decision`** is one where DisC applies a documented default silently when the rows are silent.
+- An **`optional_decision`** is one where DisC applies a documented default when the rows are silent — without refusing, but reported on Step 8's `Applied defaults` line when the implementation depends on it.
 
 The lists of which specific decisions are `required_decision` vs `optional_decision` — and the default values for each `optional_decision` — are language-specific and enumerated in the `language_profile`. The values are documented once in the `language_profile`, and every default the implementation actually depends on is reported on Step 8's `Applied defaults` line — a decision the design never made must at least be visible in the run that made it. Any default can be overridden via `config:`.
 
