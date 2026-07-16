@@ -338,6 +338,8 @@ Two host-integration flags change what is emitted: `--plan` (Steps 1–6 as plan
 
 ### Step 1: Validate Design
 
+**Load the `language_profile` first.** Step 1's checks depend on profile-owned syntax — the `system_caller` notation, the `target_placement` form, arrow disambiguation, boundary adjacency, finite-domain enumeration. Before parsing anything, run Step 3a's detection and read the matched `language_profile` (e.g. `skills/disc/java_spring.md`). This applies in every mode, including `--validate-only` and `--plan`: never judge notation against generic UML expectations — only against the loaded profile.
+
 The input set contains at least one `.puml` (UML sequence diagram) and may also contain one or more `decision_table_file`s (`<Participant>.decision.md`). The plugin reads decision-table files **from the same folder as the `.puml` being processed** — not from a project-wide `design/` root. This lets nested designs (a parent `.puml` with sibling-folder children) keep their decision tables locally scoped to their level of the call tree.
 
 **For each `.puml`:** parse the diagram. For each element, confirm it matches a concept defined in the Concepts section above:
@@ -667,7 +669,7 @@ When `--plan` is absent, the pipeline runs normally and produces Steps 1–8 nar
 
 ### Validate mode
 
-When `$ARGUMENTS` contains the token `--validate-only`, DisC executes **Step 1 only** (the refusal-grade contract checks) and exits. **No files are written. No file-writing tool is invoked.** No tests, no implementation, no plan envelope — only the verdict on whether the design is shaped well enough to feed into Steps 2–6. Validate mode lets host tools (e.g., DisC Studio) preflight the design at authoring time before the user commits to a full run.
+When `$ARGUMENTS` contains the token `--validate-only`, DisC executes **Step 1 only** (the refusal-grade contract checks — including its profile-loading preamble: detect and read the `language_profile` before judging any notation) and exits. **No files are written. No file-writing tool is invoked.** No tests, no implementation, no plan envelope — only the verdict on whether the design is shaped well enough to feed into Steps 2–6. Validate mode lets host tools (e.g., DisC Studio) preflight the design at authoring time before the user commits to a full run.
 
 **Strict-output rule** — exactly as in plan mode, Step 1 is reasoned about internally; **no per-step narration, no markdown headings, no "Validation Results" prose, no checklist of which rules passed**. The stdout contract is one of exactly two shapes:
 
