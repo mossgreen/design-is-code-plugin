@@ -148,6 +148,27 @@ Third-party marketplaces have auto-update disabled by default. To manually pull 
 
 Claude Code will notify you to restart if a new version was found.
 
+## Test skill changes locally without a release (cache patch)
+
+Claude Code runs the plugin from an **installed snapshot**, not from this repo:
+
+```
+~/.claude/plugins/cache/mossgreen-design-is-code/design-is-code/<version>/
+```
+
+(`~/.claude/plugins/installed_plugins.json` records the exact `installPath` and pinned git SHA.) Committing to this repo therefore changes nothing the running plugin sees — normally only a release + `/plugin marketplace update` does.
+
+To test a skill edit immediately, apply the same edit to the cached copy, e.g.:
+
+```
+~/.claude/plugins/cache/mossgreen-design-is-code/design-is-code/<version>/skills/disc/SKILL.md
+```
+
+No reinstall or restart needed — skill files are read fresh on each invocation. Two rules:
+
+1. **The repo stays the source of truth.** Make (and commit) the edit here first, then mirror it into the cache. A cache-only edit is lost silently on the next update.
+2. **The patch is disposable.** Any `/plugin` update or reinstall overwrites the cache folder — that's the point: release properly when done, and the patched cache is replaced by the real version.
+
 
 ## Uninstall Design-Is-Code plugin for Claude Code
 
