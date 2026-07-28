@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-07-27
+
+### Fixed
+- **Step 1 loads the `language_profile` before judging notation — in every mode, including `--validate-only` and `--plan`.** Validate mode previously ran the contract checks without the profile, so it judged notation against generic UML expectations and false-refused correct designs: it rejected the profile's own `system_caller` token (`[*]`) and the `' @package` target-placement header. Profile detection now runs as Step 1's preamble, so host tools that preflight a design at authoring time (e.g. DisC Studio) get a truthful verdict instead of a spurious refusal.
+
+### Changed
+- README documents a local cache-patch workflow for testing skill edits without cutting a release (the plugin runs from an installed snapshot, not the working repo).
+
+[0.11.1]: https://github.com/mossgreen/design-is-code-plugin/releases/tag/v0.11.1
+
 ## [0.11.0] - 2026-07-09
 
 ### Added
