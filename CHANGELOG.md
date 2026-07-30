@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.11.2] - 2026-07-30
+
+### Fixed
+- **Permits of a resolver-paired family are emitted `@Component`.** Resolver mode generates a resolver whose constructor injects every permit class, while the interface-with-permits rules said permits receive no Spring stereotype and users add one themselves. The two rules contradicted each other: DisC declared a dependency and then declined to satisfy it, so a generated resolver produced an application that could not start (`NoSuchBeanDefinitionException`) even though every unit test passed — a failure mode invisible to unit tests, since only `@SpringBootTest` context loading exercises it. The `defer-design` stub template already resolves the same tension the other way (`@Component` "so the Spring application context still wires"), and the new rule cites it. Scoped to resolver mode only: a family used for in-method pattern matching or sealed dispatch has no injection point and stays unannotated. Permits that already exist in the codebase (REUSE) are never touched. Rules updated in `java_spring.md` at the interface-with-permits kind table, the per-variant impl mode section, and the resolver section, which now shows a generated permit.
+
 ## [0.11.1] - 2026-07-27
 
 ### Fixed
