@@ -543,7 +543,7 @@ For each `entity_declaration` in the `entity_prelude` whose `entity_target = cre
 | `enum` | `public enum Kind { KIND_A, KIND_B }` | `src/main/java/{basePackagePath}/entity/Kind.java` |
 | `class` | mutable POJO: private fields + no-arg constructor + getters/setters | `src/main/java/{basePackagePath}/entity/Foo.java` |
 | `interface` (no permits) | `public interface Foo { <behaviors...> }` | `src/main/java/{basePackagePath}/entity/Foo.java` |
-| `interface` **with permits** | `public interface Parent { void behave(...); }` (NO `sealed` keyword) + one `public class V1 implements Parent { @Override ... }` file per permit. Each permit body uses the same per-variant impl mode as sealed permits (`variant_decision_table` → filled; absent → skeleton throw). Permits are emitted as `class` (not `record`) by default — strategies typically need Spring stereotypes and mutable state. Permits do NOT receive `@Service` automatically; users add it. | `Parent.java` + one `V1.java` per permit in the entity package. |
+| `interface` **with permits** | `public interface Parent { void behave(...); }` (NO `sealed` keyword) + one `public class V1 implements Parent { @Override ... }` file per permit. Each permit body uses the same per-variant impl mode as sealed permits (`variant_decision_table` → filled; absent → skeleton throw). Permits are emitted as `class` (not `record`) by default — strategies typically need Spring stereotypes and mutable state. Permits do NOT receive `@Service` automatically; users add it — **except in resolver mode**, where the generated resolver injects them and they are emitted `@Component` (see *Resolver impl from decision table*). | `Parent.java` + one `V1.java` per permit in the entity package. |
 | `sealed-interface` | `public sealed interface Parent permits V1, V2 { String behave(int input); }` — abstract behaviors only; the parent has no implementation body and no test class. Permits resolve without imports because they share the package (see Package Placement). | `src/main/java/{basePackagePath}/entity/Parent.java` |
 
 ### Record fields and behavior overrides
@@ -560,7 +560,7 @@ For a `record` entity that **is** a sealed-family permit, append the `implements
 
 ### Per-variant impl mode
 
-Each permit (sealed-family `record` permit OR interface-with-permits `class` permit) owns one method body per parent behavior. The body source is decided by Step 2.8's `variant_decision_table` pairing. Sealed-family permits emit as `public record V1(...) implements Parent`; interface-with-permits permits emit as `public class V1 implements Parent` (no record syntax, no `final` modifier, no Spring stereotype — users add `@Service` themselves when registering as Spring beans). Below the examples show records for the sealed case; substitute `class` + field declarations for the interface-with-permits case.
+Each permit (sealed-family `record` permit OR interface-with-permits `class` permit) owns one method body per parent behavior. The body source is decided by Step 2.8's `variant_decision_table` pairing. Sealed-family permits emit as `public record V1(...) implements Parent`; interface-with-permits permits emit as `public class V1 implements Parent` (no record syntax, no `final` modifier, and no Spring stereotype — users add `@Service` themselves when registering as Spring beans — **unless the family is paired with a resolver decision table**, in which case DisC itself injects the permits and MUST emit them `@Component`; see *Resolver impl from decision table*). Below the examples show records for the sealed case; substitute `class` + field declarations for the interface-with-permits case.
 
 **Skeleton mode** (no `variant_decision_table` paired):
 
@@ -685,6 +685,21 @@ Recognition rule (executed in SKILL.md Step 2.8 after sealed/interface permit ch
 
 When all four hold, the plugin generates the resolver implementation as a constructor-injected Map keyed by the input parameter, with each permit class injected as a separate constructor argument. The resolve method reads from the Map. Skeleton mode does not apply — without rows the resolver cannot be generated; an unpaired resolver decision table refuses at Step 1.
 
+**Permits of a resolver-paired family are Spring beans.** Because this mode injects each
+permit through the resolver's constructor, every permit in the family MUST be emitted
+with `@Component` — including a permit generated in skeleton mode. This is the same
+reasoning as the `defer-design` stub template above, which is `@Component` "so the Spring
+application context still wires": DisC does not get to declare a dependency and then
+leave it unsatisfiable. Omitting it produces code whose unit tests all pass while the
+application context fails to start with `NoSuchBeanDefinitionException` — a failure no
+unit test can see. Use `@Component`, not `@Service`, for the same reason the stub does:
+a skeleton permit is not yet a real implementation. Permits that already exist in the
+codebase (REUSE, `<<@class:fqn>>`) are never touched — if such a permit is not a bean,
+that is the user's wiring to fix, and Step 8 reports it.
+
+This applies **only** to resolver mode. A family used for in-method pattern matching or
+sealed dispatch has no injection point and stays unannotated.
+
 Generated output for the example above:
 
 ```java
@@ -716,6 +731,24 @@ public class DefaultTransportResolver implements TransportResolver {
     @Override
     public TransportGateway resolve(Transport transport) {
         return gateways.get(transport);
+    }
+}
+```
+
+Each permit the design creates is emitted as a bean, whether filled or skeleton:
+
+```java
+package com.example.consumer.entity;
+
+import org.springframework.stereotype.Component;
+
+@Component
+public class FcmGateway implements TransportGateway {
+
+    @Override
+    public void send(Message message) {
+        throw new UnsupportedOperationException(
+            "DisC: variant impl pending for TransportGateway.send on FcmGateway");
     }
 }
 ```
